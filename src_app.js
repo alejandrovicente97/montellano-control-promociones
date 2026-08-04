@@ -386,6 +386,36 @@ function vCaja(){
     {cls:'tot',c:[{v:'Saldo pendiente de pago a cierre'},{v:eur(pdteP),cls:pdteP>0.5?'wrn':''},{v:''}]}]);
   const topC=cli.filter(x=>x.saldo>1).sort((p,q)=>q.saldo-p.saldo).slice(0,15);
   const topP=pro.filter(x=>x.saldo<-1).sort((p,q)=>p.saldo-q.saldo).slice(0,15);
+
+  /* ---- detalle de cobros y pagos: ejecutado y pendiente ---- */
+  const [ia,ib]=win();
+  const mv=DATA.mov.filter(x=>cs.includes(x[6])&&(EJS===TODOS||x[9]==EJS));
+  const clsM={};
+  mv.forEach(x=>{const k2=x[5];(clsM[k2]=clsM[k2]||{co:0,pa:0,n:0}).n++;
+    if(x[7]>0)clsM[k2].co+=x[7]; else clsM[k2].pa+=x[7];});
+  const clsOrd=Object.keys(clsM).sort((a,b)=>(Math.abs(clsM[b].co)+Math.abs(clsM[b].pa))-(Math.abs(clsM[a].co)+Math.abs(clsM[a].pa)));
+  const TC=clsOrd.reduce((a,k2)=>({co:a.co+clsM[k2].co,pa:a.pa+clsM[k2].pa,n:a.n+clsM[k2].n}),{co:0,pa:0,n:0});
+  const tEjec=tbl([{t:'Concepto',l:1},{t:'Movimientos'},{t:'Cobros'},{t:'Pagos'},{t:'Neto'}],
+    clsOrd.map(k2=>({c:[{v:'<b>'+esc(k2)+'</b>'},{v:nf0.format(clsM[k2].n)},
+      {v:clsM[k2].co?eur(clsM[k2].co):'<span class="muted">—</span>',cls:'pos'},
+      {v:clsM[k2].pa?eur(clsM[k2].pa):'<span class="muted">—</span>',cls:'neg'},
+      {v:eur(clsM[k2].co+clsM[k2].pa),cls:sgn(clsM[k2].co+clsM[k2].pa)}]}))
+     .concat([{cls:'tot',c:[{v:'TOTAL'},{v:nf0.format(TC.n)},{v:eur(TC.co)},{v:eur(TC.pa)},{v:eur(TC.co+TC.pa)}]}]));
+
+  const pe=DATA.pend.filter(x=>cs.includes(x[5]));
+  const pgP={};
+  pe.forEach(x=>{const k2=x[5];(pgP[k2]=pgP[k2]||{co:0,pa:0,n:0}).n++;
+    if(x[0]==='Cobro')pgP[k2].co+=x[8]; else pgP[k2].pa+=x[8];});
+  const pOrd=Object.keys(pgP).sort((a,b)=>(pgP[b].co+pgP[b].pa)-(pgP[a].co+pgP[a].pa));
+  const TP=pOrd.reduce((a,k2)=>({co:a.co+pgP[k2].co,pa:a.pa+pgP[k2].pa,n:a.n+pgP[k2].n}),{co:0,pa:0,n:0});
+  const tPend=tbl([{t:'Promoción',l:1},{t:'Documentos'},{t:'Pendiente de cobro'},{t:'Pendiente de pago'},{t:'Posición neta'}],
+    pOrd.map(k2=>({c:[{v:'<b>'+esc(PMAP[k2]?.nom||k2)+'</b>'},{v:nf0.format(pgP[k2].n)},
+      {v:pgP[k2].co?eur(pgP[k2].co):'<span class="muted">—</span>',cls:'pos'},
+      {v:pgP[k2].pa?eur(pgP[k2].pa):'<span class="muted">—</span>',cls:'neg'},
+      {v:eur(pgP[k2].co-pgP[k2].pa),cls:sgn(pgP[k2].co-pgP[k2].pa)}]}))
+     .concat([{cls:'tot',c:[{v:'TOTAL'},{v:nf0.format(TP.n)},{v:eur(TP.co)},{v:eur(TP.pa)},{v:eur(TP.co-TP.pa)}]}]));
+
+  window.__tEjec=tEjec; window.__tPend=tPend;
   return k+al+`
   <div class="grid2">
     <div class="card"><h3>Posición de caja mes a mes</h3><div class="cbody"><div class="chartbox"><canvas id="k1"></canvas></div></div></div>
@@ -396,12 +426,66 @@ function vCaja(){
     <div class="card"><h3>Cobrado frente a facturado a clientes</h3><div class="cbody">${tCli}<div class="legend">Los anticipos y reservas se contabilizan en cuentas 438 y se aplican contra la factura en el momento de la escritura, por eso no tienen «facturado» propio.</div></div></div>
     <div class="card"><h3>Pagado frente a facturado a proveedores</h3><div class="cbody">${tPro}<div class="legend">Incluye pagarés y confirming emitidos: el importe figura como pagado desde la emisión del efecto, no desde su vencimiento.</div></div></div>
   </div>
-  <div class="grid2">
-   <div class="card"><h3>Mayores saldos pendientes de cobro</h3><div class="cbody scroll">${topC.length?tbl([{t:'Cliente',l:1},{t:'Facturado'},{t:'Cobrado'},{t:'Pendiente'}],topC.map(x=>({c:[{v:esc(x.nom)+'<div class="muted small">'+x.cta+'</div>'},{v:eur(x.fact)},{v:eur(x.cobr)},{v:eur(x.saldo),cls:'wrn'}]}))):'<div class="muted">Sin saldos pendientes de cobro.</div>'}</div></div>
-   <div class="card"><h3>Mayores saldos pendientes de pago</h3><div class="cbody scroll">${topP.length?tbl([{t:'Proveedor',l:1},{t:'Facturado'},{t:'Pagado'},{t:'Pendiente'}],topP.map(x=>({c:[{v:esc(x.nom)+'<div class="muted small">'+x.cta+'</div>'},{v:eur(x.fact)},{v:eur(x.cobr)},{v:eur(-x.saldo),cls:'wrn'}]}))):'<div class="muted">Sin saldos pendientes de pago.</div>'}</div></div>
-  </div>`;
+  <div class="card"><h3>Detalle de cobros y pagos <span class="note">lo ejecutado y lo pendiente · ${periodo()}</span></h3><div class="cbody">
+    <div class="toolbar">
+      <select id="mModo"><option value="ej">Ejecutado — movimientos de tesorería</option><option value="pe">Pendiente — facturas sin cobrar o sin pagar</option></select>
+      <select id="mT"><option value="">Cobros y pagos</option><option value="co">Solo cobros</option><option value="pa">Solo pagos</option></select>
+      <select id="mC"><option value="">Todos los conceptos</option>${clsOrd.map(c2=>`<option value="${esc(c2)}">${esc(c2)}</option>`).join('')}</select>
+      <select id="mM"><option value="">Todos los meses</option>${MESES.slice(ia,ib+1).map((m2,i2)=>`<option value="${m2}">${ML[ia+i2]}</option>`).join('')}</select>
+      <input type="search" id="mQ" placeholder="Buscar tercero, concepto, cuenta…">
+      <span class="muted small" id="mCount"></span>
+    </div>
+    <div id="mSum">${tEjec}</div>
+    <div class="scroll" id="mTbl" style="margin-top:12px"></div>
+    <div id="mLeg" class="legend"></div>
+  </div></div>`;
+}
+let FM={modo:'ej',t:'',c:'',m:'',q:''};
+function drawMov(){
+  const box=document.getElementById('mTbl');if(!box)return;
+  const cs=codes(SEL), q=FM.q.toLowerCase().trim(), pend=FM.modo==='pe';
+  document.getElementById('mSum').innerHTML = pend?window.__tPend:window.__tEjec;
+  document.getElementById('mC').classList.toggle('hide',pend);
+  document.getElementById('mM').classList.toggle('hide',pend);
+  document.getElementById('mLeg').innerHTML = pend
+   ? 'El saldo de la cuenta del tercero es la cifra cierta. Las facturas que lo componen se obtienen aplicando los pagos a las más antiguas, que es como se liquidan en la práctica, de modo que el detalle suma siempre el saldo. Un pagaré o confirming emitido figura como pagado desde su emisión, no desde el vencimiento.'
+   : 'Un movimiento es cada apunte de una cuenta 570 o 572. La contrapartida es el concepto dominante del asiento; en remesas y confirming, que agrupan varias facturas, se indica el primer tercero y cuántos más incluye.';
+  if(pend){
+    let r=DATA.pend.filter(x=>cs.includes(x[5]));
+    if(FM.t==='co')r=r.filter(x=>x[0]==='Cobro'); else if(FM.t==='pa')r=r.filter(x=>x[0]==='Pago');
+    if(q)r=r.filter(x=>(x[2]+' '+x[4]+' '+x[3]).toLowerCase().includes(q));
+    const co=r.filter(x=>x[0]==='Cobro').reduce((s,x)=>s+x[8],0), pa=r.filter(x=>x[0]==='Pago').reduce((s,x)=>s+x[8],0);
+    document.getElementById('mCount').textContent=`${nf0.format(r.length)} documentos · pendiente de cobro ${eur(co)} · pendiente de pago ${eur(pa)} · neto ${eur(co-pa)}`;
+    box.innerHTML=tbl([{t:'Tipo',l:1},{t:'Fecha'},{t:'Tercero',l:1},{t:'Factura o concepto',l:1},{t:'Promoción',l:1},{t:'Importe'},{t:'Liquidado'},{t:'Pendiente'}],
+      r.slice(0,1200).map(x=>({c:[
+        {v:x[0]==='Cobro'?'<span class="chip ok">Cobro</span>':'<span class="chip warn">Pago</span>'},
+        {v:x[1]||'<span class="muted">—</span>'},
+        {v:'<b>'+esc(x[2])+'</b><div class="muted small">'+x[3]+'</div>'},
+        {v:esc(x[4])},{v:'<span class="chip">'+esc(PMAP[x[5]]?.nom||x[5])+'</span>'},
+        {v:x[6]?eur(x[6]):'<span class="muted">—</span>'},{v:x[7]?eur(x[7]):'<span class="muted">—</span>'},
+        {v:eur(x[8]),cls:'wrn'}]})));
+    return;
+  }
+  let r=DATA.mov.filter(x=>cs.includes(x[6])&&(EJS===TODOS||x[9]==EJS));
+  if(FM.t==='co')r=r.filter(x=>x[7]>0); else if(FM.t==='pa')r=r.filter(x=>x[7]<0);
+  if(FM.c)r=r.filter(x=>x[5]===FM.c);
+  if(FM.m)r=r.filter(x=>x[8]===FM.m);
+  if(q)r=r.filter(x=>(x[2]+' '+x[3]+' '+x[1]+' '+x[4]).toLowerCase().includes(q));
+  const co=r.filter(x=>x[7]>0).reduce((s,x)=>s+x[7],0), pa=r.filter(x=>x[7]<0).reduce((s,x)=>s+x[7],0);
+  document.getElementById('mCount').textContent=`${nf0.format(r.length)} movimientos · cobros ${eur(co)} · pagos ${eur(pa)} · neto ${eur(co+pa)}`;
+  box.innerHTML=tbl([{t:'Fecha',l:1},{t:'Cuenta bancaria',l:1},{t:'Concepto',l:1},{t:'Contrapartida',l:1},{t:'Tipo',l:1},{t:'Promoción',l:1},{t:'Cobro'},{t:'Pago'}],
+    r.slice(0,1200).map(x=>({c:[{v:x[0]},{v:esc(x[1])},{v:esc(x[2])},
+      {v:esc(x[3])+'<div class="muted small">'+x[4]+'</div>'},
+      {v:'<span class="chip">'+esc(x[5])+'</span>'},
+      {v:'<span class="chip info">'+esc(PMAP[x[6]]?.nom||x[6])+'</span>'},
+      {v:x[7]>0?eur(x[7]):'<span class="muted">—</span>',cls:'pos'},
+      {v:x[7]<0?eur(-x[7]):'<span class="muted">—</span>',cls:'neg'}]})));
 }
 function cCaja(){
+  ['mModo','mT','mC','mM','mQ'].forEach(id=>{const e=document.getElementById(id);if(!e)return;
+    e.value=FM[{mModo:'modo',mT:'t',mC:'c',mM:'m',mQ:'q'}[id]];
+    e.oninput=e.onchange=()=>{FM.modo=mModo.value;FM.t=mT.value;FM.c=mC.value;FM.m=mM.value;FM.q=mQ.value;drawMov();};});
+  drawMov();
   const c=caja(SEL),L=lblW(),[a,b]=win();
   chart('k1',{type:'line',data:{labels:L,datasets:[{label:'Saldo de caja',data:c.saldo,borderColor:'#1f6feb',backgroundColor:'rgba(31,111,235,.10)',fill:true,tension:.3,pointRadius:0}]},
     options:{...gopt,plugins:{...gopt.plugins,legend:{display:false}}}});

@@ -424,6 +424,99 @@ def terceros(pref,tipo):
     return out
 CLI=terceros(CP,'cli'); PRO=terceros(PP,'prov'); ANT=terceros(('438',),'cli')
 
+# ---------------- MOVIMIENTOS DE TESORERIA (cobros y pagos) ----------------
+BANC={'57000000':'Caja euros','57200000':'Bancos c/c vista','57200002':'Caja Rural 2017310927',
+ '57200003':'Unicaja 5320','57200005':'Santander 2369 · Gastos Retos','57200006':'Santander 2351 · Gastos generales',
+ '57200010':'Santander 2628 · Cuenta de crédito','57200007':'Santander 4839 · Reservas Nuevo Campus',
+ '57200008':'Santander 4821 · Reservas Doñinos F1-F2','57200009':'Santander 5207 · Reservas Doñinos F3',
+ '57200011':'Santander 2636 · Pagos Doñinos','57200012':'Santander 5835 · Reservas Vistahermosa',
+ '57200013':'Santander 3225 · Pagos Nuevo Campus','57200014':'Santander 6475 · Reservas Nuevo Campus 2',
+ '57200015':'Santander 6483 · Reservas Nuevo Campus 3'}
+def _clase(c):
+    if c.startswith(('430','431','436')): return 'Cobros de clientes'
+    if c.startswith('438'): return 'Anticipos y reservas de compradores'
+    if c.startswith(('400','401','403','407','410','411')): return 'Pagos a proveedores'
+    if c.startswith('170000'): return 'Préstamo promotor'
+    if c.startswith(('520','527','560','561','566')): return 'Pólizas y efectos'
+    if c.startswith(('163','16','552','551')): return 'Empresas del grupo y socios'
+    if c.startswith(('475','476','477','470','472')): return 'Impuestos y Seguridad Social'
+    if c.startswith(('465','640','642','649')): return 'Personal'
+    if c.startswith(('662','663','664','665','669','626')): return 'Intereses, avales y comisiones'
+    if c.startswith(('570','572')): return 'Traspasos entre cuentas'
+    if c.startswith('631'): return 'Tributos'
+    return 'Otros'
+_M=M.copy(); _M['_k']=_M.file+'|'+_M.fecha.astype(str)+'|'+_M.asiento.astype(str)
+_ban=_M[_M.cta.str.startswith(('570','572'))].rename(columns={'_k':'kk'})
+_nb =_M[~_M.cta.str.startswith(('570','572'))]
+_nb=_nb.assign(_abs=_nb.neto.abs())
+_nb['clase']=[_clase(c) for c in _nb.cta]
+_agg={}
+for k_,g_ in _nb.groupby('_k'):
+    g2=g_.sort_values('_abs',ascending=False)
+    cl=g2.groupby('clase')._abs.sum().idxmax()
+    gg=g2[g2.clase==cl]
+    if len(gg)==1: desc=str(gg.descripcion.iloc[0])
+    else:
+        u=gg.descripcion.nunique()
+        desc=str(gg.descripcion.iloc[0])+(f' y {u-1} más' if u>1 else '')
+    _agg[k_]=(desc,str(gg.cta.iloc[0]),cl,len(gg))
+# traspasos entre cuentas: el asiento no tiene contrapartida fuera de tesoreria
+_bb=_ban.assign(_abs=(_ban.debe-_ban.haber).abs())
+for k_,g_ in _bb.groupby('kk'):
+    if k_ in _agg or len(g_)<2: continue
+    g2=g_.sort_values('_abs',ascending=False)
+    nom=[(BANC.get(c) if so=='PUM' else de) for c,so,de in zip(g2.cta,g2.soc,g2.descripcion)]
+    _agg[k_]=(' → '.join(dict.fromkeys([n for n in nom if n]))[:44],str(g2.cta.iloc[0]),'Traspasos entre cuentas',len(g2))
+MOV=[]
+for r in _ban.itertuples():
+    desc,cc,cl,nl=_agg.get(r.kk,('','','Otros',0))
+    imp=r2(r.debe-r.haber)
+    if abs(imp)<0.005: continue
+    if r.fecha==pd.Timestamp('2023-01-01') and r.soc=='PUM':
+        cl='Saldo inicial a 01/01/2023'; desc='Apertura de la contabilidad'
+    MOV.append([r.fecha.strftime('%d/%m/%Y'), (BANC.get(r.cta) if r.soc=='PUM' else r.descripcion)[:44],
+        str(r.comentario)[:56], desc[:44], cc, cl, r.promo, imp, r.mes, int(r.ej)])
+MOV.sort(key=lambda x:(x[8],-abs(x[7])))
+
+
+# ---------------- PENDIENTE DE COBRO Y DE PAGO ----------------
+# El saldo de la cuenta del tercero es la cifra cierta. Las facturas que lo componen
+# se derivan aplicando los pagos a las facturas mas antiguas (FIFO), que es como se
+# liquidan en la practica; asi el detalle suma siempre el saldo y nunca lo contradice.
+_fac={}
+for r in fr.itertuples():
+    _fac.setdefault(r.cta,[]).append((r.fecha,r.comentario,r2(r.haber)))
+_fce={}
+for r in fe.itertuples():
+    _fce.setdefault(r.cta,[]).append((r.fecha,r.comentario,r2(r.debe)))
+def _fifo(cta,saldo,src):
+    """Facturas que componen el saldo pendiente, de la mas reciente hacia atras."""
+    out=[];rest=saldo
+    for f_,com,imp in sorted(src.get(cta,[]),key=lambda z:z[0],reverse=True):
+        if rest<=0.05: break
+        if imp<=0: continue
+        tramo=min(imp,rest); rest=r2(rest-tramo)
+        out.append((f_,com,imp,r2(tramo)))
+    return out,r2(rest)
+PEND=[]
+for p in PRO:
+    sal=r2(-p['saldo'])
+    if sal<=0.05: continue
+    det,resto=_fifo(p['cta'],sal,_fac)
+    for f_,com,imp,tr in det:
+        PEND.append(['Pago',f_.strftime('%d/%m/%Y'),p['nom'],p['cta'],str(com)[:52],p['promo'],imp,r2(imp-tr),tr,int(f_.year)])
+    if resto>1:
+        PEND.append(['Pago','',p['nom'],p['cta'],'Saldo anterior sin factura en el registro',p['promo'],0.0,0.0,resto,0])
+for c in CLI:
+    sal=r2(c['saldo'])
+    if sal<=0.05: continue
+    det,resto=_fifo(c['cta'],sal,_fce)
+    for f_,com,imp,tr in det:
+        PEND.append(['Cobro',f_.strftime('%d/%m/%Y'),c['nom'],c['cta'],str(com)[:52],c['promo'],imp,r2(imp-tr),tr,int(f_.year)])
+    if resto>1:
+        PEND.append(['Cobro','',c['nom'],c['cta'],'Saldo anterior sin factura en el registro',c['promo'],0.0,0.0,resto,0])
+PEND.sort(key=lambda x:-x[8])
+
 # ---------------- CALIDAD ----------------
 G=M[M.cta.str.startswith(('60','61','62','63','64','65','66','67','68'))]
 CAL={}
@@ -509,7 +602,7 @@ DATA=dict(
  promos=[dict(cod=c,nom=n,loc=l,tipo=t,estado=e,soc=PSOC[c],pres=(c in PRES)) for c,n,l,t,e in PROMOS],
  ser=SER, nat=NAT, bancos=BAN, deuda=DEU, otras=OTR, pres=PRES,
  clientes=CLI, proveedores=PRO, anticipos=ANT,
- frac=FRAC, femi=FEMI, cobr=COBR, apuntes=AP,
+ frac=FRAC, femi=FEMI, cobr=COBR, apuntes=AP, mov=MOV, pend=PEND,
  calidad=dict(porEj=CAL,descuadres=DESC,sincuenta=SC,conc=CONC,sindet=SIND,dondet=DOND,
    fr_estado={k:r2(v) for k,v in mm.groupby('estado').imp.sum().items()},
    fr_n={k:int(v) for k,v in mm.estado.value_counts().items()},
