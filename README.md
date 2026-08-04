@@ -20,7 +20,7 @@ En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pes
 
 **Deuda.** Dispuesto, límite y disponible de los préstamos promotor, financiación prevista pendiente de formalizar y otra financiación del grupo.
 
-**Analítica.** Contraste entre la analítica contable del cliente y el coste que sale de las cuentas de existencias, con el desglose por sección y por fase que la analítica aporta y el diario no permite.
+**Analítica.** Contraste entre la analítica contable del cliente y el coste que sale de las cuentas de existencias, con el detalle factura a factura de los apuntes en los que ambos criterios no coinciden y el desglose por sección y fase que la analítica aporta y el diario no permite.
 
 **Detalle.** Drill-down con filtros hasta el apunte contable, la factura recibida, la factura emitida y el cobro.
 

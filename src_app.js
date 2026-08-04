@@ -591,54 +591,50 @@ function vAna(){
   const secOrd=Object.keys(secTot).sort((a,b)=>secTot[b]-secTot[a]);
   const gt=Object.values(secTot).reduce((a,b)=>a+b,0);
   const tSec=tbl([{t:'Sección (naturaleza del coste)',l:1},{t:'Importe'},{t:'% s/ total'},{t:'Peso',l:1}],
-    secOrd.map(s=>({c:[{v:esc(s)},{v:eur(secTot[s])},{v:gt?pct1(100*secTot[s]/gt):'—'},{v:barPct(gt?100*secTot[s]/gt:0,'#1f6feb')}]}))
+    secOrd.map(s2=>({c:[{v:esc(s2)},{v:eur(secTot[s2])},{v:gt?pct1(100*secTot[s2]/gt):'—'},{v:barPct(gt?100*secTot[s2]/gt:0,'#1f6feb')}]}))
      .concat([{cls:'tot',c:[{v:'TOTAL'},{v:eur(gt)},{v:'100,0 %'},{v:''}]}]));
-  /* fases */
-  const fasTot={};cods.forEach(c=>{const s=A.fas[c]||{};for(const k2 in s)fasTot[k2]=(fasTot[k2]||0)+s[k2];});
+  const fasTot={};cods.forEach(c=>{const s2=A.fas[c]||{};for(const k2 in s2)fasTot[k2]=(fasTot[k2]||0)+s2[k2];});
   const fasOrd=Object.keys(fasTot).sort();
   const ft=Object.values(fasTot).reduce((a,b)=>a+b,0);
-  const tFas=tbl([{t:'Fase',l:1},{t:'Importe'},{t:'% s/ total'}],
-    fasOrd.map(f=>({c:[{v:esc(f)},{v:eur(fasTot[f])},{v:ft?pct1(100*fasTot[f]/ft):'—'}]}))
-     .concat([{cls:'tot',c:[{v:'TOTAL'},{v:eur(ft)},{v:'100,0 %'}]}]));
-  /* reparto de la cuenta comun de Doñinos */
-  const rep=A.rep.filter(x=>Math.abs(x.imp)>500);
-  const repT=rep.reduce((a,x)=>a+x.imp,0);
-  const tRep=tbl([{t:'Promoción según la analítica',l:1},{t:'Importe'},{t:'% de la cuenta'}],
-    rep.map(x=>({c:[{v:esc(PMAP[x.cod]?.nom||x.cod)},{v:eur(x.imp)},{v:repT?pct1(100*x.imp/repT):'—'}]})));
-  /* cuentas con diferencia */
-  const ctas=A.cta.filter(x=>Math.abs(x.dif)>5000).slice(0,25);
-  const tCta=tbl([{t:'Cuenta',l:1},{t:'Denominación',l:1},{t:'Analítica'},{t:'Diario'},{t:'Diferencia'}],
-    ctas.map(x=>({c:[{v:'<span class="pill">'+x.cta+'</span>'},{v:esc(x.desc)},{v:eur(x.ana)},{v:eur(x.dia)},{v:eur(x.dif),cls:x.dif>0?'pos':'neg'}]})));
-  /* años */
-  const anioTot={};cods.forEach(c=>{const s=A.anio[c]||{};for(const k2 in s)anioTot[k2]=(anioTot[k2]||0)+s[k2];});
-
+  const fasChips=fasOrd.map(f=>`<span class="chip" style="margin-right:6px">${esc(f)}: <b>${kEur(fasTot[f])}</b> · ${ft?pct1(100*fasTot[f]/ft):'—'}</span>`).join('');
+  /* --- facturas que originan las diferencias --- */
+  const flu=A.flu.filter(f=>!soloUna||f.ana===SEL||f.dia===SEL);
+  const difTot=flu.reduce((a,f)=>a+f.imp,0);
+  const nomP=c=>esc(PMAP[c]?.nom||c);
   return k+alertas.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+`
   <div class="card"><h3>Contraste por promoción <span class="note">analítica del cliente frente al coste activado en existencias, ambos a ${A.corte}</span></h3><div class="cbody scroll">
     ${tbl([{t:'Promoción',l:1},{t:'Analítica'},{t:'Dashboard'},{t:'Diferencia'},{t:'%'},{t:'Estado',l:1},{t:'Causa',l:1}],rows)}</div></div>
-  <div class="grid2">
-    <div class="card"><h3>Coste por sección según la analítica <span class="note">el desglose por naturaleza que el diario no permite</span></h3><div class="cbody scroll">${tSec}</div></div>
-    <div class="card"><h3>Distribución por sección</h3><div class="cbody"><div class="chartbox"><canvas id="a1"></canvas></div></div></div>
+
+  <div class="card"><h3>Qué facturas originan las diferencias <span class="note">apuntes en los que la analítica y la cuenta contable no coinciden</span></h3><div class="cbody">
+    ${tbl([{t:'La analítica lo imputa a',l:1},{t:'La cuenta del diario dice',l:1},{t:'Apuntes'},{t:'Importe'},{t:'Peso',l:1}],
+      flu.map(f=>({c:[{v:'<b>'+nomP(f.ana)+'</b>'},{v:nomP(f.dia)},{v:nf0.format(f.n)},{v:eur(f.imp),cls:f.imp<0?'neg':''},
+        {v:barPct(difTot?100*Math.abs(f.imp)/Math.abs(difTot):0,'#8b5cf6')}]}))
+       .concat([{cls:'tot',c:[{v:'TOTAL'},{v:''},{v:nf0.format(flu.reduce((a,f)=>a+f.n,0))},{v:eur(difTot)},{v:''}]}]))}
+    <div class="toolbar" style="margin-top:14px">
+      <input type="search" id="dQ" placeholder="Buscar proveedor, concepto, cuenta…">
+      <select id="dP"><option value="">Todos los movimientos</option>${A.flu.map(f=>`<option value="${f.ana}|${f.dia}">${esc(PMAP[f.ana]?.nom||f.ana)} → ${esc(PMAP[f.dia]?.nom||f.dia)}</option>`).join('')}</select>
+      <span class="muted small" id="dCount"></span>
+    </div>
+    <div class="scroll" id="dTbl"></div>
+    <div class="legend">Estas diferencias afectan al <i>desglose por naturaleza</i>, no al coste por promoción del dashboard: ese lo fija el asiento de variación de existencias, que reparte directamente entre las cuentas 33000001, 33000003 y 33000004. La lista sirve para decidir si conviene abrir subcuentas 606 por promoción y dejar de depender del criterio manual de la analítica.</div>
+  </div></div>
+
+  <div class="grid3">
+    <div class="card"><h3>Coste por sección según la analítica <span class="note">el desglose por naturaleza que el diario no permite</span></h3><div class="cbody scroll">${tSec}
+      <div style="margin-top:12px">${fasChips}</div></div></div>
+    <div class="card"><h3>Distribución por sección</h3><div class="cbody"><div class="chartbox" style="height:320px"><canvas id="a1"></canvas></div></div></div>
   </div>
-  <div class="grid2">
-    <div class="card"><h3>Coste por fase según la analítica</h3><div class="cbody">${tFas}</div></div>
-    <div class="card"><h3>Evolución por ejercicio</h3><div class="cbody"><div class="chartbox"><canvas id="a2"></canvas></div></div></div>
-  </div>
-  <div class="grid2">
-    <div class="card"><h3>Cómo reparte la analítica la cuenta común de Doñinos <span class="note">60600002 · coste obra chalets Doñinos</span></h3><div class="cbody">${tRep}
-      <div class="legend">El dashboard atribuye esta cuenta íntegramente a Puerto de Salamanca para el desglose por naturaleza. La analítica reparte ${pct1(rep.length&&repT?100*(rep.find(x=>x.cod==='DONINOS_RES')?.imp||0)/repT:0)} a Doñinos Residencial. La diferencia no afecta al coste por promoción del dashboard, que se fija por las cuentas de existencias 33000001, 33000003 y 33000004.</div></div></div>
-    <div class="card"><h3>Cuentas con mayor diferencia entre analítica y diario</h3><div class="cbody scroll">${ctas.length?tCta:'<div class="muted">Sin diferencias relevantes por cuenta.</div>'}
-      <div class="legend">Las diferencias en cuentas 606 responden al distinto tratamiento del suelo y de la variación de existencias entre ambas fuentes.</div></div></div>
-  </div>
-  <div class="card"><h3>Detalle de la analítica <span class="note">${nf0.format(A.n)} apuntes</span></h3><div class="cbody">
+
+  <div class="card"><h3>Detalle completo de la analítica <span class="note">${nf0.format(A.n)} apuntes</span></h3><div class="cbody">
     <div class="toolbar">
       <input type="search" id="aQ" placeholder="Buscar comentario, sección, cuenta…">
-      <select id="aSec"><option value="">Todas las secciones</option>${A.secciones.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select>
+      <select id="aSec"><option value="">Todas las secciones</option>${A.secciones.map(s2=>`<option value="${esc(s2)}">${esc(s2)}</option>`).join('')}</select>
       <select id="aAnio"><option value="">Todos los ejercicios</option>${A.anios.map(y=>`<option value="${y}">${y}</option>`).join('')}</select>
       <span class="muted small" id="aCount"></span>
     </div>
     <div class="scroll" id="aTbl"></div></div></div>`;
 }
-let FA={q:'',sec:'',anio:''};
+let FA={q:'',sec:'',anio:''}, FD={q:'',par:''};
 function cAna(){
   const A=ANA();if(!A)return;
   const soloUna=SEL!==CONS, cods=soloUna?[SEL]:A.cods;
@@ -647,14 +643,26 @@ function cAna(){
   chart('a1',{type:'doughnut',data:{labels:ks,datasets:[{data:ks.map(k=>secTot[k]),backgroundColor:COL,borderWidth:2,borderColor:'#fff'}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'right',labels:{boxWidth:9,boxHeight:9,font:{size:10},usePointStyle:true,pointStyle:'circle'}},
     tooltip:{callbacks:{label:c=>' '+c.label+': '+eur(c.parsed)}}}}});
-  const an={};cods.forEach(c=>{const s=A.anio[c]||{};for(const k in s)an[k]=(an[k]||0)+s[k];});
-  const ys=Object.keys(an).sort();
-  chart('a2',{type:'bar',data:{labels:ys,datasets:[{label:'Coste imputado',data:ys.map(y=>an[y]),backgroundColor:'#1f6feb',borderRadius:3}]},
-    options:{...gopt,plugins:{...gopt.plugins,legend:{display:false}}}});
   ['aQ','aSec','aAnio'].forEach(id=>{const e=document.getElementById(id);if(!e)return;
     e.value=FA[{aQ:'q',aSec:'sec',aAnio:'anio'}[id]];
     e.oninput=e.onchange=()=>{FA.q=aQ.value;FA.sec=aSec.value;FA.anio=aAnio.value;drawAna();};});
-  drawAna();
+  ['dQ','dP'].forEach(id=>{const e=document.getElementById(id);if(!e)return;
+    e.value=FD[{dQ:'q',dP:'par'}[id]];
+    e.oninput=e.onchange=()=>{FD.q=dQ.value;FD.par=dP.value;drawDif();};});
+  drawAna();drawDif();
+}
+function drawDif(){
+  const A=ANA(),box=document.getElementById('dTbl');if(!box)return;
+  const q=FD.q.toLowerCase().trim(), soloUna=SEL!==CONS;
+  let r=A.dif.filter(x=>(!soloUna||x[1]===SEL||x[2]===SEL)&&(EJS===TODOS||x[8]==EJS));
+  if(FD.par){const[a,b]=FD.par.split('|');r=r.filter(x=>x[1]===a&&x[2]===b);}
+  if(q)r=r.filter(x=>(x[7]+' '+x[3]+' '+x[4]).toLowerCase().includes(q));
+  const tot=r.reduce((s,x)=>s+x[6],0);
+  document.getElementById('dCount').textContent=`${nf0.format(r.length)} apuntes · ${eur(tot)}`;
+  box.innerHTML=tbl([{t:'Fecha',l:1},{t:'Analítica',l:1},{t:'Diario',l:1},{t:'Cuenta',l:1},{t:'Sección',l:1},{t:'Concepto o factura',l:1},{t:'Importe'}],
+    r.slice(0,600).map(x=>({c:[{v:x[0]},{v:'<span class="chip">'+esc(PMAP[x[1]]?.nom||x[1])+'</span>'},
+      {v:'<span class="chip info">'+esc(PMAP[x[2]]?.nom||x[2])+'</span>'},{v:'<span class="pill">'+x[3]+'</span>'},
+      {v:esc(x[4])},{v:esc(x[7])},{v:eur(x[6]),cls:x[6]<0?'neg':''}]})));
 }
 function drawAna(){
   const A=ANA(),box=document.getElementById('aTbl');if(!box)return;
@@ -666,7 +674,7 @@ function drawAna(){
   const tot=r.reduce((s,x)=>s+x[8],0);
   document.getElementById('aCount').textContent=`${nf0.format(r.length)} apuntes · ${eur(tot)}`;
   box.innerHTML=tbl([{t:'Fecha',l:1},{t:'Proyecto',l:1},{t:'Sección',l:1},{t:'Canal',l:1},{t:'Fase',l:1},{t:'Cuenta',l:1},{t:'Concepto',l:1},{t:'Importe'}],
-    r.slice(0,1500).map(x=>({c:[{v:x[5]},{v:esc(x[1])},{v:esc(x[2])},{v:esc(x[3])},{v:esc(x[4])},
+    r.slice(0,1200).map(x=>({c:[{v:x[5]},{v:esc(x[1])},{v:esc(x[2])},{v:esc(x[3])},{v:esc(x[4])},
       {v:'<span class="pill">'+x[7]+'</span>'},{v:esc(x[9])},{v:eur(x[8])}]})));
 }
 /* ============================== CALIDAD DE DATOS ============================== */

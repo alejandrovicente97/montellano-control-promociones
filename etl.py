@@ -595,16 +595,45 @@ if _F:
     # reparto que ellos hacen de la cuenta comun de Doñinos
     D2=A[A.cta=='60600002'].groupby('cod').importe.sum()
     REP=[dict(cod=k,imp=r2(v)) for k,v in D2.sort_values(ascending=False).items() if abs(v)>1]
+
+    # ---- facturas que originan las diferencias: criterio de la analitica vs cuenta del diario
+    MAP606={'60600001':'LARAD','60600002':'PUERTO','60600003':'NUEVOCAMPUS','60600004':'MARIN','60600005':'VISTAHERMOSA',
+     '60600006':'MIRADOR','60600007':'ISLARUA','60600008':'OFICINAS','60600009':'SUELO_IND','60600010':'OFICINAS',
+     '60600011':'CARBAJOSA','60600012':'DONINOS_RES','60600014':'PTE_VILLANUEVA'}
+    PTN={'21873':'PUERTO','21874':'NUEVOCAMPUS','21875':'PUERTO','21876':'NUEVOCAMPUS','21877':'NUEVOCAMPUS'}
+    import re as _re
+    def _mio(cta,com):
+        com=str(com or '')
+        if cta in MAP606: return MAP606[cta]
+        if cta=='66230100': return 'PUERTO'
+        if cta=='66230101': return 'NUEVOCAMPUS'
+        if cta=='66230102': return 'MARIN'
+        m=_re.search(r'\b(2187[34567])\b',com)
+        if m: return PTN[m.group(1)]
+        return None
+    A['mio']=[_mio(c,k) for c,k in zip(A.cta,A.comentario)]
+    _d=A[A.mio.notna()&(A.mio!=A.cod)].copy()
+    _d['abs']=_d.importe.abs()
+    _d=_d.sort_values('abs',ascending=False)
+    DIF=[[ (r.fecha.strftime('%d/%m/%Y') if isinstance(r.fecha,pd.Timestamp) else ''),
+           r.cod, r.mio, str(r.cta), str(r.seccion or ''), str(r.fase or ''), r2(r.importe),
+           str(r.comentario if r.comentario==r.comentario and r.comentario is not None else '')[:70],
+           int(r.anio) if r.anio==r.anio else 0 ] for r in _d.itertuples()]
+    FLU=[]
+    for (a_,b_),g_ in _d.groupby(['cod','mio']):
+        FLU.append(dict(ana=a_,dia=b_,n=int(len(g_)),imp=r2(g_.importe.sum())))
+    FLU=sorted(FLU,key=lambda z:-abs(z['imp']))
+
     # detalle
     DET=[[r.cod,r.proyecto,str(r.seccion or ''),str(r.canal or ''),str(r.fase or ''),
           (r.fecha.strftime('%d/%m/%Y') if isinstance(r.fecha,pd.Timestamp) else ''),
           int(r.anio) if r.anio==r.anio else 0,str(r.cta),r2(r.importe),str(r.comentario if r.comentario==r.comentario and r.comentario is not None else '')[:58]] for r in A.itertuples()]
 
     ANA=dict(cods=CODS,secciones=SEC,fases=FAS,anios=[int(x) for x in ANIO],
-      cmp=CMP,sec=MSEC,fas=MFAS,anio=MANIO,cta=CTA,rep=REP,det=DET,
+      cmp=CMP,sec=MSEC,fas=MFAS,anio=MANIO,cta=CTA,rep=REP,det=DET,dif=DIF,flu=FLU,
       total=r2(A.importe.sum()),n=len(A),corte='30/06/2026')
     DATA['ana'] = ANA
-    print('  analitica del cliente incorporada:', len(A), 'apuntes,', r2(A.importe.sum()), 'EUR')
+    print('  analitica del cliente incorporada:', len(A), 'apuntes')
 else:
     print('  aviso: no hay ANALITICA*.xlsx en BASE; la pestana Analitica quedara vacia')
 
