@@ -32,6 +32,7 @@ En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pes
 - Presupuestos operativos por promoción (`Presupuestos/`).
 - Analítica contable del cliente (`ANALITICA*.xlsx`), opcional.
 - Registro de facturas emitidas y recibidas.
+- Carpeta `Logos/` (opcional): si existe junto a `Diarios/`, cada imagen que contenga se incrusta como logo de su promoción. El nombre del fichero puede ser el código interno (`CARBAJOSA.png`) o el nombre comercial (`Jardines de Carbajosa.svg`); se admiten png, jpg, svg y webp. Sin esa carpeta, cada promoción usa un monograma con su color corporativo.
 
 ## Cómo se genera
 

@@ -94,13 +94,21 @@ function burn(sel){
   return {b,b3,bT,disp,runway:b<0?cap(c.fin/(-b)):null,runwayTot:b<0?cap((c.fin+disp)/(-b)):null};
 }
 /* ---------- charts ---------- */
-const CH={},COL=['#1f6feb','#0f9d58','#e8a33d','#8b5cf6','#d7443e','#14b8a6','#ec4899','#64748b','#0ea5e9','#a3612a','#7c3aed','#059669','#f97316','#94a3b8','#cbd5e1'];
+const CH={};
+/* Paleta corporativa: azul Montellano #102C57 como base y un acento por promocion.
+   Jardines de Carbajosa toma el verde oliva de su propia identidad. */
+const ACC={PUERTO:'#1c4183',NUEVOCAMPUS:'#102C57',CARBAJOSA:'#4E6735',DONINOS_RES:'#3b6ea5',
+ MARIN:'#2f7d72',VISTAHERMOSA:'#7a5aa6',MIRADOR:'#a8783a',LARAD:'#5b7c99',ISLARUA:'#6b7a8f',
+ PTE_VILLANUEVA:'#8a6f4e',SUELO_IND:'#7b8794',NAVES:'#557089',OFICINAS:'#94a1b3',SIN_ASIGNAR:'#98a2b3'};
+const acc=c=>ACC[c]||'#102C57';
+const COL=['#102C57','#1c4183','#4E6735','#2f7d72','#a8783a','#7a5aa6','#3b6ea5','#6b7a8f','#5b7c99','#8a6f4e','#557089','#7b8794','#94a1b3','#b0bac7','#cbd5e1'];
+const inic=n=>n.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ ]/g,'').split(/\s+/).filter(w=>w.length>2&&!/^(de|del|la|el|los|las|y|para)$/i.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
 function chart(id,cfg){if(CH[id])CH[id].destroy();const el=document.getElementById(id);if(el)CH[id]=new Chart(el,cfg);}
 const gopt={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
- plugins:{legend:{position:'bottom',labels:{boxWidth:10,boxHeight:10,font:{size:11},usePointStyle:true,pointStyle:'circle'}},
+ plugins:{legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,font:{size:10.5},usePointStyle:true,pointStyle:'circle',padding:14}},
  tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+eur(c.parsed.y??c.parsed)}}},
  scales:{x:{grid:{display:false},ticks:{font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:14}},
- y:{grid:{color:'#eef1f6'},ticks:{font:{size:11},callback:v=>kEur(v)}}}};
+ y:{grid:{color:'#eef1f6'},ticks:{font:{size:10.5},callback:v=>kEur(v)}}}};
 function tbl(head,rows){
   let h='<table><thead><tr>'+head.map(x=>`<th class="${x.l?'l':''}">${x.t}</th>`).join('')+'</tr></thead><tbody>';
   h+=rows.map(r=>`<tr class="${r.cls||''}">`+r.c.map((c,i)=>`<td class="${head[i].l?'l':''} ${c.cls||''}">${c.v??c}</td>`).join('')+'</tr>').join('');
@@ -136,7 +144,7 @@ function vRes(){
       {v:kEur(cc.fin),cls:cc.fin<0?'neg':''},
       {v:dd.dispuesto?kEur(dd.dispuesto):'<span class="muted">—</span>'},
       {v:dd.disponible!=null?kEur(dd.disponible):'<span class="muted">—</span>'},
-      {v:av!=null?barPct(av,av>105?'#d7443e':(av>85?'#e8a33d':'#1f6feb')):'<span class="muted">—</span>'},
+      {v:av!=null?barPct(av,av>105?'#b3261e':(av>85?'#b57407':acc(cd))):'<span class="muted">—</span>'},
     ]};});
   if(SEL===CONS){
     const t=lista.reduce((a,cd)=>{const q=pnl(cd),cc=caja(cd),dd=deuda(cd);
@@ -175,19 +183,19 @@ function vRes(){
 function cRes(){
   const cs=SEL===CONS?P_REAL.map(p=>p.cod):[SEL], L=lblW();
   chart('c1',{type:'bar',data:{labels:L,datasets:cs.filter(c=>serW([c],'act').some(v=>v>0))
-    .map((c,i)=>({label:PMAP[c].nom,data:serW([c],'act'),backgroundColor:COL[i%COL.length],borderRadius:2,stack:'a'}))},
+    .map((c,i)=>({label:PMAP[c].nom,data:serW([c],'act'),backgroundColor:acc(c),borderRadius:2,stack:'a'}))},
     options:{...gopt,scales:{...gopt.scales,x:{...gopt.scales.x,stacked:true},y:{...gopt.scales.y,stacked:true}}}});
   const c=caja(SEL);
   chart('c2',{type:'line',data:{labels:L,datasets:[
-    {label:'Saldo de caja',data:c.saldo,borderColor:'#1f6feb',backgroundColor:'rgba(31,111,235,.10)',fill:true,tension:.3,pointRadius:0},
-    {label:'Variación del mes',data:c.mens,type:'bar',backgroundColor:'#e8a33d'}]},options:gopt});
+    {label:'Saldo de caja',data:c.saldo,borderColor:acc(SEL===CONS?'NUEVOCAMPUS':SEL),backgroundColor:'rgba(16,44,87,.08)',fill:true,tension:.3,pointRadius:0},
+    {label:'Variación del mes',data:c.mens,type:'bar',backgroundColor:'#a8783a'}]},options:gopt});
   const lt=(SEL===CONS?P_REAL.map(p=>p.cod):[SEL]).map(c=>({n:PMAP[c].nom,v:S(c,'actAc')[NM-1]})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
-  chart('c3',{type:'bar',data:{labels:lt.map(x=>x.n),datasets:[{label:'Coste incurrido acumulado',data:lt.map(x=>x.v),backgroundColor:'#1f6feb',borderRadius:3}]},
+  chart('c3',{type:'bar',data:{labels:lt.map(x=>x.n),datasets:[{label:'Coste incurrido acumulado',data:lt.map(x=>x.v),backgroundColor:(SEL===CONS?P_REAL.map(p=>p.cod):[SEL]).map(c=>acc(c)).slice(0,lt.length),borderRadius:3}]},
     options:{...gopt,indexAxis:'y',plugins:{...gopt.plugins,legend:{display:false}},
       scales:{x:{grid:{color:'#eef1f6'},ticks:{font:{size:10},callback:v=>kEur(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}}}});
   chart('c4',{type:'line',data:{labels:L,datasets:[
-    {label:'Obra en curso',data:serW(codes(SEL),'exSaldo'),borderColor:'#0f9d58',backgroundColor:'rgba(15,157,88,.10)',fill:true,tension:.3,pointRadius:0},
-    {label:'Deuda con entidades',data:serW(codes(SEL),'deudaSaldo'),borderColor:'#d7443e',tension:.3,pointRadius:0}]},options:gopt});
+    {label:'Obra en curso',data:serW(codes(SEL),'exSaldo'),borderColor:'#2f7d72',backgroundColor:'rgba(47,125,114,.10)',fill:true,tension:.3,pointRadius:0},
+    {label:'Deuda con entidades',data:serW(codes(SEL),'deudaSaldo'),borderColor:'#b3261e',tension:.3,pointRadius:0}]},options:gopt});
 }
 
 /* ============================== P&L ============================== */
@@ -261,10 +269,10 @@ function vPyg(){
 function cPyg(){
   const cs=codes(SEL),L=lblW(),ing=serW(cs,'ing'),cv=serW(cs,'cv');
   chart('p1',{type:'bar',data:{labels:L,datasets:[
-    {label:'Ingresos',data:ing,backgroundColor:'#0f9d58',borderRadius:2},
-    {label:'Coste de ventas',data:cv.map(v=>-v),backgroundColor:'#d7443e',borderRadius:2},
-    {label:'Margen',data:ing.map((v,i)=>v-cv[i]),type:'line',borderColor:'#1f6feb',tension:.3,pointRadius:0}]},options:gopt});
-  chart('p2',{type:'bar',data:{labels:L,datasets:[{label:'Coste incurrido',data:serW(cs,'act'),backgroundColor:'#1f6feb',borderRadius:2}]},
+    {label:'Ingresos',data:ing,backgroundColor:'#1b7f4d',borderRadius:2},
+    {label:'Coste de ventas',data:cv.map(v=>-v),backgroundColor:'#b3261e',borderRadius:2},
+    {label:'Margen',data:ing.map((v,i)=>v-cv[i]),type:'line',borderColor:'#102C57',tension:.3,pointRadius:0}]},options:gopt});
+  chart('p2',{type:'bar',data:{labels:L,datasets:[{label:'Coste incurrido',data:serW(cs,'act'),backgroundColor:acc(SEL===CONS?'NUEVOCAMPUS':SEL),borderRadius:2}]},
     options:{...gopt,plugins:{...gopt.plugins,legend:{display:false}}}});
 }
 /* ============================== PRESUPUESTO VS REAL ============================== */
@@ -287,9 +295,9 @@ function vPres(){
   const rows=Object.entries(pr.caps).sort((a,b)=>b[1].pres-a[1].pres).map(([cap,v])=>{
     const des=v.ejec-v.pres, av=v.pres?100*v.ejec/v.pres:0;
     return {c:[{v:'<b>'+esc(cap)+'</b>'},{v:eur(v.pres)},{v:eur(v.ejec)},{v:eur(des),cls:des>0?'neg':'pos'},
-      {v:v.pres?pct1(100*des/v.pres):'—',cls:des>0?'neg':'pos'},{v:barPct(av,av>105?'#d7443e':(av>85?'#e8a33d':'#1f6feb'))}]};});
+      {v:v.pres?pct1(100*des/v.pres):'—',cls:des>0?'neg':'pos'},{v:barPct(av,av>105?'#b3261e':(av>85?'#b57407':'#1c4183'))}]};});
   rows.push({cls:'tot',c:[{v:'TOTAL'},{v:eur(pr.pres)},{v:eur(pr.ejec)},{v:eur(pr.ejec-pr.pres),cls:pr.ejec>pr.pres?'neg':'pos'},
-    {v:pr.pres?pct1(100*(pr.ejec-pr.pres)/pr.pres):'—'},{v:barPct(pr.pres?100*pr.ejec/pr.pres:0,'#0d3b7a')}]});
+    {v:pr.pres?pct1(100*(pr.ejec-pr.pres)/pr.pres):'—'},{v:barPct(pr.pres?100*pr.ejec/pr.pres:0,'#102C57')}]});
   const desv=Object.entries(pr.caps).map(([cap,v])=>({cap,d:v.ejec-v.pres,p:v.pres?100*(v.ejec-v.pres)/v.pres:0}))
     .filter(x=>Math.abs(x.d)>1000).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)).slice(0,6);
   const t2=tbl([{t:'Capítulo',l:1},{t:'Desviación'},{t:'%'},{t:'Lectura',l:1}],desv.map(x=>({c:[
@@ -298,8 +306,8 @@ function vPres(){
             :'<span class="chip ok">Bajo presupuesto</span> puede ser ahorro real o gasto aún no incurrido'}]})));
 
   const t0=tbl([{t:'Contraste global',l:1},{t:'Presupuesto'},{t:'Real (contabilidad)'},{t:'Ejecutado (estudio)'},{t:'Avance real'}],[
-    {c:[{v:'Coste total de la promoción'},{v:eur(pr.coste)},{v:eur(pr.real)},{v:eur(pr.ejec)},{v:barPct(pr.avance,pr.avance>105?'#d7443e':'#1f6feb')}]},
-    {c:[{v:'Ventas'},{v:eur(pr.ventas)},{v:eur(pr.ingR)},{v:'<span class="muted">—</span>'},{v:barPct(pr.ventasPct,'#0f9d58')}]},
+    {c:[{v:'Coste total de la promoción'},{v:eur(pr.coste)},{v:eur(pr.real)},{v:eur(pr.ejec)},{v:barPct(pr.avance,pr.avance>105?'#b3261e':'#1c4183')}]},
+    {c:[{v:'Ventas'},{v:eur(pr.ventas)},{v:eur(pr.ingR)},{v:'<span class="muted">—</span>'},{v:barPct(pr.ventasPct,'#1b7f4d')}]},
   ]);
 
   let t3='';
@@ -307,10 +315,10 @@ function vPres(){
     const co=DATA.pres[cod].cobra;
     const r=co.map(x=>{const d=x.real-x.contrata,av=x.contrata?100*x.real/x.contrata:0;
       return {c:[{v:x.n+'. '+esc(x.cap)},{v:eur(x.pres)},{v:eur(x.contrata)},{v:eur(x.real)},
-        {v:eur(d),cls:d>0?'neg':'pos'},{v:barPct(av,av>105?'#d7443e':(av>85?'#e8a33d':'#1f6feb'))}]};});
+        {v:eur(d),cls:d>0?'neg':'pos'},{v:barPct(av,av>105?'#b3261e':(av>85?'#b57407':'#1c4183'))}]};});
     const T=co.reduce((a,x)=>({p:a.p+x.pres,c:a.c+x.contrata,r:a.r+x.real}),{p:0,c:0,r:0});
     r.push({cls:'tot',c:[{v:'TOTAL CAPÍTULOS DE OBRA'},{v:eur(T.p)},{v:eur(T.c)},{v:eur(T.r)},
-      {v:eur(T.r-T.c),cls:T.r>T.c?'neg':'pos'},{v:barPct(T.c?100*T.r/T.c:0,'#0d3b7a')}]});
+      {v:eur(T.r-T.c),cls:T.r>T.c?'neg':'pos'},{v:barPct(T.c?100*T.r/T.c:0,'#102C57')}]});
     t3=`<div class="card"><h3>Capítulos de obra · ${esc(PMAP[cod].nom)} <span class="note">contrata aplicada frente a certificado real</span></h3><div class="cbody scroll">${tbl([{t:'Capítulo',l:1},{t:'Presupuesto'},{t:'Contrata aplicada'},{t:'Real'},{t:'Desviación'},{t:'Avance'}],r)}</div></div>`;
   }
   let t4='';
@@ -338,9 +346,9 @@ function cPres(){
   const cs=pr.cods, L=ML;
   const acum=[];for(let i=0;i<NM;i++)acum.push(cs.reduce((t,c)=>t+S(c,'actAc')[i],0));
   chart('r1',{type:'line',data:{labels:L,datasets:[
-    {label:'Coste real acumulado',data:acum,borderColor:'#1f6feb',backgroundColor:'rgba(31,111,235,.10)',fill:true,tension:.25,pointRadius:0},
-    {label:'Presupuesto total',data:new Array(NM).fill(pr.coste),borderColor:'#d7443e',borderDash:[6,4],pointRadius:0},
-    {label:'Ventas acumuladas',data:(()=>{const o=[];for(let i=0;i<NM;i++)o.push(cs.reduce((t,c)=>t+S(c,'ingAc')[i],0));return o;})(),borderColor:'#0f9d58',tension:.25,pointRadius:0}
+    {label:'Coste real acumulado',data:acum,borderColor:'#1c4183',backgroundColor:'rgba(16,44,87,.08)',fill:true,tension:.25,pointRadius:0},
+    {label:'Presupuesto total',data:new Array(NM).fill(pr.coste),borderColor:'#b3261e',borderDash:[6,4],pointRadius:0},
+    {label:'Ventas acumuladas',data:(()=>{const o=[];for(let i=0;i<NM;i++)o.push(cs.reduce((t,c)=>t+S(c,'ingAc')[i],0));return o;})(),borderColor:'#1b7f4d',tension:.25,pointRadius:0}
   ]},options:gopt});
   const ks=Object.keys(pr.caps).sort((a,b)=>pr.caps[b].pres-pr.caps[a].pres);
   chart('r2',{type:'doughnut',data:{labels:ks,datasets:[{data:ks.map(k=>pr.caps[k].pres),backgroundColor:COL,borderWidth:2,borderColor:'#fff'}]},
@@ -487,13 +495,13 @@ function cCaja(){
     e.oninput=e.onchange=()=>{FM.modo=mModo.value;FM.t=mT.value;FM.c=mC.value;FM.m=mM.value;FM.q=mQ.value;drawMov();};});
   drawMov();
   const c=caja(SEL),L=lblW(),[a,b]=win();
-  chart('k1',{type:'line',data:{labels:L,datasets:[{label:'Saldo de caja',data:c.saldo,borderColor:'#1f6feb',backgroundColor:'rgba(31,111,235,.10)',fill:true,tension:.3,pointRadius:0}]},
+  chart('k1',{type:'line',data:{labels:L,datasets:[{label:'Saldo de caja',data:c.saldo,borderColor:'#1c4183',backgroundColor:'rgba(16,44,87,.08)',fill:true,tension:.3,pointRadius:0}]},
     options:{...gopt,plugins:{...gopt.plugins,legend:{display:false}}}});
   const co=[],pa=[];for(let i=a;i<=b;i++){let x=0,y=0;c.cuentas.forEach(v=>{x+=v.cob[i];y+=v.pag[i];});co.push(x);pa.push(-y);}
   chart('k2',{type:'bar',data:{labels:L,datasets:[
-    {label:'Cobros',data:co,backgroundColor:'#0f9d58',borderRadius:2},
-    {label:'Pagos',data:pa,backgroundColor:'#d7443e',borderRadius:2},
-    {label:'Variación neta',data:c.mens,type:'line',borderColor:'#0e1420',tension:.3,pointRadius:0}]},options:gopt});
+    {label:'Cobros',data:co,backgroundColor:'#1b7f4d',borderRadius:2},
+    {label:'Pagos',data:pa,backgroundColor:'#b3261e',borderRadius:2},
+    {label:'Variación neta',data:c.mens,type:'line',borderColor:'#102C57',tension:.3,pointRadius:0}]},options:gopt});
 }
 /* ============================== DEUDA ============================== */
 function vDeuda(){
@@ -675,7 +683,7 @@ function vAna(){
   const secOrd=Object.keys(secTot).sort((a,b)=>secTot[b]-secTot[a]);
   const gt=Object.values(secTot).reduce((a,b)=>a+b,0);
   const tSec=tbl([{t:'Sección (naturaleza del coste)',l:1},{t:'Importe'},{t:'% s/ total'},{t:'Peso',l:1}],
-    secOrd.map(s2=>({c:[{v:esc(s2)},{v:eur(secTot[s2])},{v:gt?pct1(100*secTot[s2]/gt):'—'},{v:barPct(gt?100*secTot[s2]/gt:0,'#1f6feb')}]}))
+    secOrd.map(s2=>({c:[{v:esc(s2)},{v:eur(secTot[s2])},{v:gt?pct1(100*secTot[s2]/gt):'—'},{v:barPct(gt?100*secTot[s2]/gt:0,'#1c4183')}]}))
      .concat([{cls:'tot',c:[{v:'TOTAL'},{v:eur(gt)},{v:'100,0 %'},{v:''}]}]));
   const fasTot={};cods.forEach(c=>{const s2=A.fas[c]||{};for(const k2 in s2)fasTot[k2]=(fasTot[k2]||0)+s2[k2];});
   const fasOrd=Object.keys(fasTot).sort();
@@ -692,7 +700,7 @@ function vAna(){
   <div class="card"><h3>Qué facturas originan las diferencias <span class="note">apuntes en los que la analítica y la cuenta contable no coinciden</span></h3><div class="cbody">
     ${tbl([{t:'La analítica lo imputa a',l:1},{t:'La cuenta del diario dice',l:1},{t:'Apuntes'},{t:'Importe'},{t:'Peso',l:1}],
       flu.map(f=>({c:[{v:'<b>'+nomP(f.ana)+'</b>'},{v:nomP(f.dia)},{v:nf0.format(f.n)},{v:eur(f.imp),cls:f.imp<0?'neg':''},
-        {v:barPct(difTot?100*Math.abs(f.imp)/Math.abs(difTot):0,'#8b5cf6')}]}))
+        {v:barPct(difTot?100*Math.abs(f.imp)/Math.abs(difTot):0,'#7a5aa6')}]}))
        .concat([{cls:'tot',c:[{v:'TOTAL'},{v:''},{v:nf0.format(flu.reduce((a,f)=>a+f.n,0))},{v:eur(difTot)},{v:''}]}]))}
     <div class="toolbar" style="margin-top:14px">
       <input type="search" id="dQ" placeholder="Buscar proveedor, concepto, cuenta…">
@@ -844,14 +852,38 @@ function cCal(){}
 /* ============================== ARRANQUE ============================== */
 const TABS=[['res','Resumen'],['pyg','P&L'],['pres','Presupuesto vs Real'],['caja','Caja'],['deuda','Deuda'],['ana','Analítica'],['det','Detalle'],['cal','Calidad de datos']];
 function render(){
+  document.documentElement.style.setProperty('--accent', SEL===CONS?'#102C57':acc(SEL));
   document.getElementById('subtitle').textContent=
-   `${DATA.meta.periodo} · ${DATA.meta.sociedades.length} sociedades · ${nf0.format(DATA.meta.lineasMov)} apuntes contables · ${nf0.format(DATA.frac.length)} facturas de proveedor y ${nf0.format(DATA.femi.length)} emitidas`;
+   `${DATA.meta.periodo} · ${DATA.meta.sociedades.length} sociedades · ${nf0.format(DATA.meta.lineasMov)} apuntes`;
   document.getElementById('tabs').innerHTML=TABS.map(([k,l])=>`<div class="tab ${k===TAB?'on':''}" data-t="${k}">${l}</div>`).join('');
   document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{TAB=t.dataset.t;render();window.scrollTo(0,0);});
+  /* banda de contexto */
+  const p=pnl(SEL), c=caja(SEL), d=deuda(SEL), pr=pres(SEL);
+  const nom=SEL===CONS?'Consolidado del grupo':PMAP[SEL].nom;
+  const sub=SEL===CONS
+    ? `${P_REAL.length} promociones y proyectos · ${DATA.meta.sociedades.length} sociedades`
+    : `${esc(PMAP[SEL].tipo)} · ${esc(PMAP[SEL].loc)}`;
+  const col=SEL===CONS?'#102C57':acc(SEL);
+  const est=SEL===CONS?'':`<span class="chip" style="margin-left:10px">${esc(PMAP[SEL].estado)}</span>`;
+  const lg=(DATA.logos||{})[SEL];
+  const marca=lg?`<div class="plogo img"><img src="${lg}" alt="${esc(nom)}"></div>`
+               :`<div class="plogo" style="background:${col}">${esc(SEL===CONS?'M':inic(nom)||'M')}</div>`;
+  document.getElementById('pband').innerHTML=`<div class="pbin">
+    ${marca}
+    <div class="pmeta"><b>${esc(nom)}</b>${est}<div>${sub}</div></div>
+    <div class="pstats">
+      <div class="pstat"><div class="l">Ingresos</div><div class="v">${kEur(p.ing)}</div></div>
+      <div class="pstat"><div class="l">Coste incurrido</div><div class="v">${kEur(p.act)}</div></div>
+      <div class="pstat"><div class="l">Obra en curso</div><div class="v">${kEur(p.ex1)}</div></div>
+      <div class="pstat"><div class="l">Caja</div><div class="v">${kEur(c.fin)}</div></div>
+      <div class="pstat"><div class="l">Deuda</div><div class="v">${kEur(d.dispuesto)}</div></div>
+      ${pr?`<div class="pstat"><div class="l">Avance económico</div><div class="v">${pct1(pr.avance)}</div></div>`:''}
+    </div></div>`;
   document.getElementById('main').innerHTML=({res:vRes,pyg:vPyg,pres:vPres,caja:vCaja,deuda:vDeuda,ana:vAna,det:vDet,cal:vCal})[TAB]();
   ({res:cRes,pyg:cPyg,pres:cPres,caja:cCaja,deuda:cDeuda,ana:cAna,det:cDet,cal:cCal})[TAB]?.();
   document.getElementById('footer').innerHTML=
-   `Fuente: diarios contables 2023-2026 de las ${DATA.meta.sociedades.length} sociedades del grupo, presupuestos operativos por promoción, analítica contable del cliente y registro de facturas emitidas y recibidas. `+
+   `Promociones Urbanas Montellano, S.L. · Documento de uso interno. `+
+   `Fuente: diarios contables 2023-2026 de las ${DATA.meta.sociedades.length} sociedades del grupo, presupuestos operativos por promoción, analítica contable y registro de facturas emitidas y recibidas. `+
    `Importes en euros. Último cierre incorporado: ${DATA.meta.ultimo}. Para actualizar un mes basta con sustituir el bloque <code>const DATA</code> del fichero.`;
 }
 function init(){

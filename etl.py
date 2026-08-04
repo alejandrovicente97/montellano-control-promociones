@@ -563,6 +563,32 @@ PROMOS=[
  ('OFICINAS','Oficinas y mejoras propias','Salamanca (Corrillo, Azafranal)','Inmovilizado propio','—'),
  ('SIN_ASIGNAR','Sin asignar / Estructura','—','Gastos de estructura y partidas sin criterio','—'),
 ]
+# ---------------- LOGOS DE PROMOCION (opcional) ----------------
+# Si existe una carpeta Logos/ junto a los Diarios, cada imagen se incrusta en el
+# dashboard como logo de su promocion. El nombre del fichero puede ser el codigo
+# interno (CARBAJOSA.png) o el nombre comercial (Jardines de Carbajosa.svg).
+# Formatos admitidos: png, jpg, jpeg, svg, webp. Sin carpeta, se usa el monograma.
+import base64, unicodedata
+def _slug(t):
+    t=unicodedata.normalize('NFKD',str(t)).encode('ascii','ignore').decode().upper()
+    return re.sub(r'[^A-Z0-9]','',t)
+_NOM={c:n for c,n,_l,_t,_e in PROMOS}
+LOGOS={}
+_dirL=os.path.join(BASE,'Logos')
+if os.path.isdir(_dirL):
+    _mime={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.svg':'image/svg+xml','.webp':'image/webp'}
+    for _f in sorted(os.listdir(_dirL)):
+        _e=os.path.splitext(_f)[1].lower()
+        if _e not in _mime: continue
+        _s=_slug(os.path.splitext(_f)[0])
+        _cod=next((c for c in _NOM if _slug(c)==_s or _slug(_NOM[c])==_s),None)
+        if not _cod: continue
+        _b=open(os.path.join(_dirL,_f),'rb').read()
+        if len(_b)>400_000: continue
+        LOGOS[_cod]='data:%s;base64,%s'%(_mime[_e],base64.b64encode(_b).decode())
+    print('  logos incrustados:',len(LOGOS),'de',len(_NOM))
+
+
 SOCX=sorted({(r.soc,r.soc_nom,r.nif) for r in D.itertuples()})
 PSOC={c:sorted(D[D.promo==c].soc_nom.unique().tolist()) for c in PORD}
 NAT={}
@@ -602,7 +628,7 @@ DATA=dict(
  promos=[dict(cod=c,nom=n,loc=l,tipo=t,estado=e,soc=PSOC[c],pres=(c in PRES)) for c,n,l,t,e in PROMOS],
  ser=SER, nat=NAT, bancos=BAN, deuda=DEU, otras=OTR, pres=PRES,
  clientes=CLI, proveedores=PRO, anticipos=ANT,
- frac=FRAC, femi=FEMI, cobr=COBR, apuntes=AP, mov=MOV, pend=PEND,
+ frac=FRAC, femi=FEMI, cobr=COBR, apuntes=AP, mov=MOV, pend=PEND, logos=LOGOS,
  calidad=dict(porEj=CAL,descuadres=DESC,sincuenta=SC,conc=CONC,sindet=SIND,dondet=DOND,
    fr_estado={k:r2(v) for k,v in mm.groupby('estado').imp.sum().items()},
    fr_n={k:int(v) for k,v in mm.estado.value_counts().items()},
