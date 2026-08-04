@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Promociones Urbanas Montellano · Control de promociones</title>
+<!--CHARTJS-->
+<style>
+:root{
+--bg:#0e1420;--bg2:#141c2b;--card:#ffffff;--ink:#1a2233;--ink2:#5b6779;--ink3:#8b95a6;
+--line:#e4e8ef;--accent:#1f6feb;--accent2:#0d3b7a;--ok:#0f9d58;--warn:#e8a33d;--bad:#d7443e;
+--chip:#eef2f8;--shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+background:#f4f6fa;color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased}
+header{background:linear-gradient(135deg,var(--bg) 0%,var(--bg2) 100%);color:#fff;padding:18px 22px 0}
+.hwrap{max-width:1560px;margin:0 auto}
+.htop{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between}
+h1{font-size:19px;margin:0;font-weight:650;letter-spacing:-.2px}
+.sub{color:#93a1b8;font-size:12.5px;margin-top:3px}
+.selwrap{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,input[type=search],input[type=text]{background:#fff;border:1px solid var(--line);border-radius:8px;
+padding:8px 11px;font-size:13.5px;color:var(--ink);font-family:inherit;outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+header select{font-weight:600}
+#selPromo{min-width:290px}
+#selEj{min-width:190px}
+.tabs{display:flex;gap:2px;margin-top:16px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:10px 15px;color:#9aa8bf;cursor:pointer;font-size:13.5px;font-weight:550;white-space:nowrap;
+border-bottom:2.5px solid transparent;transition:.15s}
+.tab:hover{color:#dbe4f0}
+.tab.on{color:#fff;border-bottom-color:#4d9bff}
+main{max-width:1560px;margin:0 auto;padding:20px 22px 60px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:13px 15px;box-shadow:var(--shadow)}
+.kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);font-weight:600}
+.kpi .v{font-size:22px;font-weight:660;margin-top:5px;letter-spacing:-.4px;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:11.5px;color:var(--ink2);margin-top:3px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);margin-bottom:16px}
+.card>h3{margin:0;padding:13px 16px;font-size:13.5px;font-weight:640;border-bottom:1px solid var(--line);
+display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.card>h3 .note{font-weight:450;color:var(--ink3);font-size:11.5px}
+.cbody{padding:14px 16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.grid1{display:grid;grid-template-columns:1fr;gap:16px}
+@media(max-width:1000px){.grid2,.grid3{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:right;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;
+color:var(--ink3);font-weight:640;border-bottom:1px solid var(--line);white-space:nowrap;background:#fafbfd}
+th:first-child,td:first-child{text-align:left}
+th.l,td.l{text-align:left}
+td{padding:7px 10px;text-align:right;border-bottom:1px solid #f1f3f7;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.tot td{font-weight:660;border-top:1.5px solid var(--ink);background:#fafbfd}
+tr.sub2 td{background:#f7f9fc;font-weight:600}
+tbody tr:hover{background:#f8fafd}
+.pos{color:var(--ok)}.neg{color:var(--bad)}.wrn{color:var(--warn)}
+.muted{color:var(--ink3)}
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;background:var(--chip);color:var(--ink2)}
+.chip.ok{background:#e3f5ea;color:#0b7a44}.chip.bad{background:#fdeaea;color:#b32a25}
+.chip.warn{background:#fdf3e0;color:#96631a}.chip.info{background:#e7f0fe;color:#134a9e}
+.bar{height:7px;border-radius:99px;background:#eef1f6;overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%;border-radius:99px}
+.chartbox{position:relative;height:270px}
+.chartbox.sm{height:210px}
+details{border-top:1px solid #f1f3f7}
+details>summary{cursor:pointer;padding:9px 16px;font-size:13px;font-weight:600;list-style:none;display:flex;
+justify-content:space-between;align-items:center;gap:10px}
+details>summary::-webkit-details-marker{display:none}
+details>summary:before{content:"▸";color:var(--ink3);margin-right:7px;transition:.15s;display:inline-block}
+details[open]>summary:before{transform:rotate(90deg)}
+details>summary:hover{background:#f8fafd}
+.dbody{padding:0 16px 14px;max-height:520px;overflow:auto}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.toolbar input[type=search]{min-width:230px}
+.scroll{overflow:auto;max-height:560px}
+.scroll table{min-width:820px}
+.small{font-size:12px}
+.pill{font-size:11px;padding:1px 7px;border-radius:5px;background:#eef2f8;color:var(--ink2);font-weight:600}
+.alert{border-left:3px solid var(--warn);background:#fffaf1;padding:11px 14px;border-radius:0 8px 8px 0;
+font-size:12.5px;color:#6b4d13;margin-bottom:12px;line-height:1.55}
+.alert.bad{border-color:var(--bad);background:#fff5f5;color:#8a2b26}
+.alert.ok{border-color:var(--ok);background:#f2fbf6;color:#0b6135}
+.legend{font-size:11.5px;color:var(--ink3);line-height:1.6;margin-top:8px}
+.hide{display:none!important}
+.rowflex{display:flex;gap:8px;align-items:center;justify-content:flex-end}
+.wfull{width:100%}
+footer{max-width:1560px;margin:0 auto;padding:0 22px 40px;color:var(--ink3);font-size:11.5px;line-height:1.7}
+</style>
+</head>
+<body>
+<header><div class="hwrap">
+ <div class="htop">
+  <div>
+   <h1>Promociones Urbanas Montellano · Control de promociones</h1>
+   <div class="sub" id="subtitle"></div>
+  </div>
+  <div class="selwrap">
+   <select id="selEj"></select>
+   <select id="selPromo"></select>
+  </div>
+ </div>
+ <div class="tabs" id="tabs"></div>
+</div></header>
+<main id="main"></main>
+<footer id="footer"></footer>
+<!--APP-->
+</body>
+</html>
