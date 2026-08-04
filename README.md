@@ -1,12 +1,14 @@
 # Control de promociones — Promociones Urbanas Montellano, S.L.
 
-Dashboard de control de gestión de las promociones inmobiliarias del grupo. Uso interno.
+Dashboard de control de gestión de las promociones inmobiliarias del grupo. Ejercicios 2023 a 2026 (último cierre incorporado: 31/07/2026). Uso interno.
 
 **→ [Abrir el dashboard](https://alejandrovicente97.github.io/montellano-control-promociones/)**
 
 ## Qué contiene
 
 Un único fichero `index.html` autocontenido (CSS, JavaScript y Chart.js en línea, sin dependencias externas). Se abre en cualquier navegador y funciona sin conexión.
+
+Selector de ejercicio (acumulado 2023-2026 o año concreto) y selector de promoción en la cabecera; todas las pestañas responden a ambos.
 
 - **Resumen** — KPIs del grupo y cuadro de mando comparativo de las promociones.
 - **P&L** — ingresos, coste de las ventas, margen y coste por naturaleza, con contraste frente al margen objetivo del estudio económico.
@@ -18,7 +20,7 @@ Un único fichero `index.html` autocontenido (CSS, JavaScript y Chart.js en lín
 
 ## Fuentes
 
-- Diarios contables del ejercicio de las ocho sociedades del grupo (`Diarios/`).
+- Diarios contables 2023, 2024, 2025 y 2026 de las ocho sociedades del grupo (`Diarios/`). Los asientos de apertura y de cierre se excluyen para encadenar los cuatro ejercicios sin duplicar saldos.
 - Presupuestos operativos por promoción (`Presupuestos/`).
 - Registro de facturas emitidas y recibidas.
 
@@ -36,4 +38,6 @@ Todo lo que hay fuera de ese bloque es presentación y lógica de cálculo: no n
 
 ## Criterios de asignación
 
-Las partidas se imputan a promoción únicamente mediante criterios verificables en el diario: sociedad vehículo, cuenta de existencias o de suelo, cuenta de coste de obra, sufijo de promoción en la cuenta de cliente, serie de la factura emitida, número de préstamo y cuenta bancaria. Nada se reparte por estimación: lo que no encaja en un criterio permanece en la bandeja «Sin asignar» y se muestra íntegro en la pestaña de calidad de datos.
+El coste incurrido se imputa a promoción a través del asiento de variación de existencias, que la propia contabilidad reparte por promoción y fase: la cobertura es del 100 %. El resto de criterios —sociedad vehículo, cuenta de solar, cuenta de coste de obra, sufijo de promoción en la cuenta de cliente, serie de la factura emitida, número de préstamo y cuenta bancaria— sirven para el desglose por naturaleza, la tesorería y la deuda.
+
+Nada se reparte por estimación. Lo que no encaja en un criterio verificable permanece en una de las dos bandejas —«Doñinos común», para lo que no separa Puerto de Salamanca de Doñinos Residencial, y «Sin asignar», para estructura y partidas genéricas— y se muestra íntegro en la pestaña de calidad de datos.
