@@ -1,7 +1,6 @@
 /* =============================================================================
    Dashboard de control de promociones - Promociones Urbanas Montellano, S.L.
    Capa de presentacion. Se ensambla en index.html mediante build.py.
-   No contiene datos: todo llega en el objeto global DATA.
    ============================================================================= */
 /* ===================== LÓGICA DEL DASHBOARD (multiejercicio) ===================== */
 const CONS='__CONSOLIDADO__', TODOS='TODOS';
@@ -350,7 +349,7 @@ function vPyg(){
     <div class="card"><h3>Cuenta de resultados · ${esc(SEL===CONS?'Consolidado':PMAP[SEL].nom)} <span class="note">${esc(subt)}</span></h3><div class="cbody">${tbl([{t:'Concepto',l:1},{t:'Importe'},{t:'% s/ ingresos'}],r1)}
       <div class="legend">El margen recoge únicamente las unidades entregadas y escrituradas en el periodo. Lo vendido pero no entregado permanece en obra en curso.</div></div></div>
     <div class="card"><h3>Coste por naturaleza <span class="note">parte trazable a cuenta contable</span></h3><div class="cbody">${tbl([{t:'Naturaleza',l:1},{t:'Importe'},{t:'% s/ total'}],r2r)}
-      <div class="legend">${poco?'<b>En esta promoción el desglose por naturaleza es muy limitado:</b> la mayor parte del coste entra por la cuenta común de Doñinos y por el asiento de variación de existencias, que imputa la promoción pero no la naturaleza. El detalle por capítulos está en la pestaña <i>Presupuesto vs Real</i>.':'El diario identifica la naturaleza únicamente en las cuentas específicas de cada promoción. El resto se imputa a la promoción en el asiento mensual de variación de existencias, sin desglose por naturaleza.'}</div></div></div>
+      <div class="legend">${poco?'<b>En esta promoción el desglose por naturaleza es muy limitado:</b> la mayor parte del coste entra por la cuenta común de Doñinos y por el asiento de variación de existencias, que imputa la promoción pero no la naturaleza. El detalle por capítulos está en la pestaña <i>Presupuesto vs Real</i>.':'El diario identifica la naturaleza únicamente en las cuentas específicas de cada promoción. El resto se imputa a la promoción en el asiento mensual de variación de existencias, sin desglose por naturaleza.'}</div></div></div></div>
   ${comp}${detalles}${ltd}
   <div class="grid2">
     <div class="card"><h3>Ingresos, coste de ventas y margen por mes</h3><div class="cbody"><div class="chartbox"><canvas id="p1"></canvas></div></div></div>

@@ -293,8 +293,11 @@ ban['bn']=[BANCOS[c][1] if (s=='PUM' and c in BANCOS) else d for c,s,d in zip(ba
 BAN=[]
 for (p,nm,cta,soc),x in ban.groupby(['bp','bn','cta','soc_nom']):
     mv=serie(x,'neto',1)
+    # cobros y pagos por el neto de cada apunte: asi la diferencia entre ambos
+    # cuadra siempre con la variacion de caja, incluso con importes negativos
+    xp=x[x.neto>0]; xn=x[x.neto<0]
     BAN.append(dict(promo=p,nom=nm,cta=cta,soc=soc,mens=mv,saldo=acum(mv),
-      cob=serie(x[x.debe>0],'debe',1),pag=serie(x[x.haber>0],'haber',1)))
+      cob=serie(xp,'neto',1),pag=[-v for v in serie(xn,'neto',1)]))
 for c in PORD:
     b=[x for x in BAN if x['promo']==c]
     SER[c]['cajaVar']=[r2(sum(x['mens'][i] for x in b)) for i in range(NM)]

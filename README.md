@@ -66,6 +66,14 @@ const DATA = { ... };
 
 Todo lo que hay fuera de ese bloque es presentación y lógica de cálculo, y no necesita tocarse.
 
+## Verificación
+
+`verificar.py` vuelve a leer los diarios contables desde Excel, aplica el mismo criterio de exclusión de asientos técnicos y contrasta 153 magnitudes contra `DATA.json`: apuntes, partida doble, coste incurrido, obra en curso, ingresos, coste de las unidades entregadas, caja, deuda, saldos de clientes y proveedores cuenta a cuenta, tesorería, presupuesto, cuadro comercial, capítulos de obra, cronograma y analítica. Incluye además comprobaciones de coherencia interna: la misma magnitud no puede salir distinta en dos pestañas.
+
+```
+python verificar.py
+```
+
 ## Criterios de asignación
 
 El coste incurrido se imputa a promoción por la cuenta de existencias 330000xx: es la propia contabilidad la que lo reparte por promoción y fase en el asiento mensual de variación de existencias, de modo que la cobertura es del 100 %. El resto de criterios —sociedad vehículo, cuenta de solar, cuenta 606 de obra, sufijo de promoción en la cuenta de cliente, serie de la factura emitida, número de préstamo y cuenta bancaria— sirven para el desglose por naturaleza, la tesorería y la deuda.
@@ -81,3 +89,4 @@ Nada se reparte por estimación. Lo que no encaja en un criterio verificable per
 | `build.py` | Ensamblado del `index.html` |
 | `src_layout.html` | Estructura y CSS |
 | `src_app.js` | Lógica del dashboard, sin datos |
+| `verificar.py` | Verificación independiente de todas las cifras |
