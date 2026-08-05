@@ -1,6 +1,5 @@
 /* =============================================================================
    Dashboard de control de promociones - Promociones Urbanas Montellano, S.L.
-   Capa de presentacion. Se ensambla en index.html mediante build.py.
    ============================================================================= */
 /* ===================== LÓGICA DEL DASHBOARD (multiejercicio) ===================== */
 const CONS='__CONSOLIDADO__', TODOS='TODOS';
@@ -15,6 +14,11 @@ const MLBL=Object.fromEntries(MESES.map((m,i)=>[m,ML[i]]));
 const MIDX=Object.fromEntries(MESES.map((m,i)=>[m,i]));
 const ULT=MESES[MESES.length-1];
 const sum=a=>(a||[]).reduce((x,y)=>x+(y||0),0);
+/* Enlace al PDF escaneado de la factura. La ruta es relativa a la carpeta del
+   dashboard, asi que funciona al abrirlo desde la carpeta de OneDrive. */
+const pdfLink=(ruta,txt)=>ruta
+  ? `<a class="pdf" href="${encodeURI(ruta)}" target="_blank" rel="noopener" title="Abrir la factura escaneada">${txt}<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9 1v1.5h3.4L6.2 8.7l1.1 1.1 6.2-6.2V7H15V1H9zM2 3h5v1.5H3.5v8H12V9h1.5v5H2V3z"/></svg></a>`
+  : txt;
 const z=v=>(typeof v==='number'&&Math.abs(v)<0.005)?0:v;
 const eur=v=>(v==null||isNaN(v))?'—':nf.format(z(v))+' €';
 const eur0=v=>(v==null||isNaN(v))?'—':nf0.format(z(v))+' €';
@@ -695,7 +699,7 @@ function drawDet(){
     if(q)r=r.filter(x=>(x[1]+' '+x[2]+' '+x[0]).toLowerCase().includes(q));
     r=r.slice().sort((p,s)=>s[4]-p[4]); n=r.length;tot=r.reduce((s,x)=>s+x[4],0);
     html=tbl([{t:'Proveedor',l:1},{t:'Referencia',l:1},{t:'Fecha'},{t:'Importe'},{t:'Pagado'},{t:'Pendiente'},{t:'Fecha pago'},{t:'Estado',l:1},{t:'Promoción',l:1}],
-      r.slice(0,1500).map(x=>({c:[{v:'<b>'+esc(x[1])+'</b><div class="muted small">'+x[0]+'</div>'},{v:'<span class="pill">'+esc(x[2])+'</span>'},{v:x[3]},
+      r.slice(0,1500).map(x=>({c:[{v:'<b>'+esc(x[1])+'</b><div class="muted small">'+x[0]+'</div>'},{v:pdfLink(x[11],'<span class="pill">'+esc(x[2])+'</span>')},{v:x[3]},
         {v:eur(x[4])},{v:eur(x[5])},{v:eur(x[6]),cls:x[6]>0.05?'wrn':'muted'},{v:x[9]||'<span class="muted">—</span>'},
         {v:x[7]==='Pagada'?'<span class="chip ok">Pagada</span>':(x[7]==='Parcial'?'<span class="chip warn">Parcial</span>':'<span class="chip bad">Sin pago identificado</span>')},
         {v:'<span class="chip">'+esc(PMAP[x[8]]?.nom||x[8])+'</span>'}]})));
@@ -705,7 +709,7 @@ function drawDet(){
     if(q)r=r.filter(x=>(x[1]+' '+x[2]).toLowerCase().includes(q));
     r=r.slice().sort((p,s)=>s[4]-p[4]); n=r.length;tot=r.reduce((s,x)=>s+x[4],0);
     html=tbl([{t:'Cliente',l:1},{t:'Concepto',l:1},{t:'Fecha'},{t:'Importe (con IVA)'},{t:'Promoción',l:1}],
-      r.slice(0,1500).map(x=>({c:[{v:'<b>'+esc(x[1])+'</b><div class="muted small">'+x[0]+'</div>'},{v:esc(x[2])},{v:x[3]},{v:eur(x[4])},
+      r.slice(0,1500).map(x=>({c:[{v:'<b>'+esc(x[1])+'</b><div class="muted small">'+x[0]+'</div>'},{v:pdfLink(x[7],esc(x[2]))},{v:x[3]},{v:eur(x[4])},
         {v:'<span class="chip">'+esc(PMAP[x[5]]?.nom||x[5])+'</span>'}]})));
   } else {
     let r=DATA.cobr.filter(x=>cs.includes(x[5])&&okEj(x[6]));
@@ -713,7 +717,7 @@ function drawDet(){
     if(q)r=r.filter(x=>(x[1]+' '+x[2]).toLowerCase().includes(q));
     r=r.slice().sort((p,s)=>s[4]-p[4]); n=r.length;tot=r.reduce((s,x)=>s+x[4],0);
     html=tbl([{t:'Cliente',l:1},{t:'Concepto',l:1},{t:'Fecha'},{t:'Importe'},{t:'Promoción',l:1}],
-      r.slice(0,1500).map(x=>({c:[{v:'<b>'+esc(x[1])+'</b><div class="muted small">'+x[0]+'</div>'},{v:esc(x[2])},{v:x[3]},{v:eur(x[4])},
+      r.slice(0,1500).map(x=>({c:[{v:'<b>'+esc(x[1])+'</b><div class="muted small">'+x[0]+'</div>'},{v:pdfLink(x[7],esc(x[2]))},{v:x[3]},{v:eur(x[4])},
         {v:'<span class="chip">'+esc(PMAP[x[5]]?.nom||x[5])+'</span>'}]})));
   }
   document.getElementById('fCount').textContent=`${nf0.format(n)} registros · ${F.tipo==='apuntes'?'suma del debe':'importe total'} ${eur(tot)}${n>1500?' · se muestran los 1.500 primeros':''}`;
@@ -932,10 +936,10 @@ function vTer(){
       const sal=esC?o.saldo:-o.saldo;
       const rFac = esC
         ? tbl([{t:'Fecha',l:1},{t:'Concepto',l:1},{t:'Promoción',l:1},{t:'Importe'}],
-            fe.sort((a,b)=>b[4]-a[4]).slice(0,300).map(z=>({c:[{v:z[3]},{v:esc(z[2])},
+            fe.sort((a,b)=>b[4]-a[4]).slice(0,300).map(z=>({c:[{v:z[3]},{v:pdfLink(z[7],esc(z[2]))},
               {v:'<span class="chip">'+esc(PMAP[z[5]]?.nom||z[5])+'</span>'},{v:eur(z[4])}]})))
         : tbl([{t:'Fecha',l:1},{t:'Referencia',l:1},{t:'Promoción',l:1},{t:'Importe'},{t:'Pagado'},{t:'Pendiente'},{t:'Estado',l:1},{t:'Fecha de pago',l:1}],
-            fr.sort((a,b)=>b[4]-a[4]).slice(0,300).map(z=>({c:[{v:z[3]},{v:esc(z[2])},
+            fr.sort((a,b)=>b[4]-a[4]).slice(0,300).map(z=>({c:[{v:z[3]},{v:pdfLink(z[11],esc(z[2]))},
               {v:'<span class="chip">'+esc(PMAP[z[8]]?.nom||z[8])+'</span>'},{v:eur(z[4])},{v:eur(z[5])},
               {v:z[6]>0.5?eur(z[6]):'<span class="muted">—</span>',cls:z[6]>0.5?'wrn':''},
               {v:z[7]==='Pagada'?'<span class="chip ok">Pagada</span>':(z[7]==='Parcial'?'<span class="chip warn">Parcial</span>':'<span class="chip bad">'+esc(z[7])+'</span>')},
@@ -1533,6 +1537,12 @@ function vCal(){
    <div class="card"><h3>Conciliación entre gasto contabilizado y coste imputado a promociones</h3><div class="cbody scroll">${tConc}
      <div class="legend">El coste imputado incluye compras de suelo e inmovilizado de promoción, que no son gasto del ejercicio: por eso puede superar al gasto contabilizado.</div></div></div>
    <div class="grid1">
+     ${(DATA.pdfsin&&DATA.pdfsin.length)?`<div class="card"><h3>Facturas escaneadas sin correspondencia contable <span class="note">${nf0.format(DATA.pdfsin.length)} ficheros</span></h3><div class="cbody scroll">
+       ${tbl([{t:'Fichero',l:1},{t:'Carpeta',l:1},{t:'Fecha leída',l:1},{t:'Mayor importe leído'}],
+         DATA.pdfsin.slice(0,400).map(x=>({c:[{v:pdfLink(x[1]+'/'+x[0],'<b>'+esc(x[0])+'</b>')},{v:esc(x[1])},
+           {v:x[2]||'<span class="muted">no legible</span>'},{v:x[3]?eur(x[3]):'<span class="muted">no legible</span>'}]})))}
+       <div class="legend">El reconocimiento de texto no ha podido casar estas facturas con ningún apunte del registro: escaneos de baja calidad, recibos que no son factura de proveedor o documentos de otro ejercicio. Se listan para revisión manual y no se enlazan desde ninguna otra pestaña, para no mostrar una factura equivocada.</div>
+       </div></div>`:''}
      <div class="card"><h3>Bandeja «Sin asignar» · detalle por cuenta <span class="note">${eur(cq.sin)} de gasto de estructura</span></h3><div class="cbody scroll">${tSin}</div></div>
    </div>
    <div class="card"><h3>Facturas de proveedor sin pago identificado o con pago parcial <span class="note">${nf0.format(frSin.length)} facturas · ${eur(frSin.reduce((a,x)=>a+x[6],0))} pendiente</span></h3><div class="cbody scroll">${tFr}</div></div>
@@ -1553,6 +1563,7 @@ function bandaInfo(){
     it.push(['En obra',ob]);
     it.push(['Unidades presupuestadas',nf0.format(P_REAL.reduce((s,p)=>s+(DATA.pres[p.cod]?.uds||0),0))]);
     it.push(['Último cierre',DATA.meta.ultimo]);
+    if(DATA.meta.generado) it.push(['Actualizado',DATA.meta.generado]);
   } else {
     const p=PMAP[SEL], pr=DATA.pres[SEL];
     it.push(['Sociedades',(p.soc||[]).join(' + ')||'—']);
@@ -1560,13 +1571,15 @@ function bandaInfo(){
     if(pr?.ventas) it.push(['Ventas presupuestadas',kEur(pr.ventas)]);
     if(pr?.margen_pct!=null) it.push(['Margen objetivo',pct1(pr.margen_pct)]);
     it.push(['Último cierre',DATA.meta.ultimo]);
+    if(DATA.meta.generado) it.push(['Actualizado',DATA.meta.generado]);
   }
   return it.map(([l,v])=>`<div class="pstat"><div class="l">${esc(l)}</div><div class="v">${esc(String(v))}</div></div>`).join('');
 }
 function render(){
   document.documentElement.style.setProperty('--accent', SEL===CONS?'#102C57':acc(SEL));
-  document.getElementById('subtitle').textContent=
-   `${DATA.meta.periodo} · ${DATA.meta.sociedades.length} sociedades · ${nf0.format(DATA.meta.lineasMov)} apuntes`;
+  document.getElementById('subtitle').innerHTML=
+   `${esc(DATA.meta.periodo)} · ${DATA.meta.sociedades.length} sociedades · ${nf0.format(DATA.meta.lineasMov)} apuntes`+
+   (DATA.meta.generado?`<b class="act">Actualizado el ${esc(DATA.meta.generado)}</b>`:'');
   document.getElementById('tabs').innerHTML=TABS.map(([k,l])=>`<div class="tab ${k===TAB?'on':''}" data-t="${k}">${l}</div>`).join('');
   document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{TAB=t.dataset.t;render();window.scrollTo(0,0);});
   /* banda de contexto */
@@ -1589,7 +1602,7 @@ function render(){
   document.getElementById('footer').innerHTML=
    `Promociones Urbanas Montellano, S.L. · Documento de uso interno. `+
    `Fuente: diarios contables 2023-2026 de las ${DATA.meta.sociedades.length} sociedades del grupo, presupuestos operativos por promoción, analítica contable y registro de facturas emitidas y recibidas. `+
-   `Importes en euros. Último cierre incorporado: ${DATA.meta.ultimo}. Para actualizar un mes basta con sustituir el bloque <code>const DATA</code> del fichero.`;
+   `Importes en euros. Último cierre contable incorporado: <b>${DATA.meta.ultimo}</b>.`+(DATA.meta.generado?` Este cuadro de mando se generó el <b>${esc(DATA.meta.generado)}</b>${DATA.meta.generadoHora?' a las '+esc(DATA.meta.generadoHora):''}.`:'')+` Para actualizar un mes basta con sustituir el bloque <code>const DATA</code> del fichero.`;
 }
 function init(){
   const s=document.getElementById('selPromo');

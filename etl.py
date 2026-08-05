@@ -624,14 +624,43 @@ for socc,lab in [('SPV_CARB','Carbajosa')]:
         for z in ser: s=r2(s+z); a.append(s)
         OTR.append(dict(cta=socc+'/'+cta,nom=l2+' → '+lab,serie=a,saldo=a[-1]))
 
+# ---------------- ENLACE A LAS FACTURAS ESCANEADAS (opcional) ----------------
+# Si existe ocr/mapa_facturas.json (lo genera mapa.py), cada factura del registro
+# recibe la ruta relativa de su PDF para poder abrirlo desde el dashboard.
+_cands=[os.path.join(os.path.dirname(os.path.abspath(__file__)),'ocr','mapa_facturas.json'),
+        os.path.join(OUT,'ocr','mapa_facturas.json'),
+        os.path.join(BASE,'ocr','mapa_facturas.json')]
+_mp=next((p for p in _cands if os.path.exists(p)),_cands[0])
+PDFREC={}; PDFEMI={}; PDFSIN=[]
+if os.path.exists(_mp):
+    _m=json.load(open(_mp,encoding='utf-8'))
+    PDFREC={int(k):v for k,v in _m.get('rec',{}).items()}
+    PDFEMI={int(k):v for k,v in _m.get('emi',{}).items()}
+    PDFSIN=_m.get('sin',[])
+    print('  facturas escaneadas enlazadas:',len(PDFREC)+len(PDFEMI),'| sin casar:',len(PDFSIN))
+FRAC=[x+[PDFREC.get(i)] for i,x in enumerate(FRAC)]
+FEMI=[x+[PDFEMI.get(i)] for i,x in enumerate(FEMI)]
+
+
+# ---------------- SELLO DE ACTUALIZACION ----------------
+# Fecha y hora en que se genero este DATA.json, para que el dashboard pueda
+# decir cuando se actualizo por ultima vez.
+import datetime as _dt
+try:
+    _tz=_dt.timezone(_dt.timedelta(hours=2))          # horario peninsular de verano
+    _ahora=_dt.datetime.now(_tz)
+except Exception:
+    _ahora=_dt.datetime.now()
+GEN=_ahora.strftime('%d/%m/%Y'); GENH=_ahora.strftime('%H:%M')
+
 DATA=dict(
  meta=dict(ejercicios=[int(e) for e in EJ],meses=MESES,mesesLbl=MLBL,
-   periodo='01/01/2023 – 31/07/2026',ultimo='31/07/2026',
+   periodo='01/01/2023 – 31/07/2026',ultimo='31/07/2026',generado=GEN,generadoHora=GENH,
    sociedades=[dict(cod=a,nom=b,nif=c) for a,b,c in SOCX],lineas=len(D),lineasMov=len(M)),
  promos=[dict(cod=c,nom=n,loc=l,tipo=t,estado=e,soc=PSOC[c],pres=(c in PRES)) for c,n,l,t,e in PROMOS],
  ser=SER, nat=NAT, bancos=BAN, deuda=DEU, otras=OTR, pres=PRES,
  clientes=CLI, proveedores=PRO, anticipos=ANT,
- frac=FRAC, femi=FEMI, cobr=COBR, apuntes=AP, mov=MOV, pend=PEND, logos=LOGOS,
+ frac=FRAC, femi=FEMI, pdfsin=PDFSIN, cobr=COBR, apuntes=AP, mov=MOV, pend=PEND, logos=LOGOS,
  calidad=dict(porEj=CAL,descuadres=DESC,sincuenta=SC,conc=CONC,sindet=SIND,dondet=DOND,
    fr_estado={k:r2(v) for k,v in mm.groupby('estado').imp.sum().items()},
    fr_n={k:int(v) for k,v in mm.estado.value_counts().items()},

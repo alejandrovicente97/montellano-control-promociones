@@ -8,7 +8,7 @@ Dashboard de control de gestión de las promociones inmobiliarias del grupo. Eje
 
 Un único fichero `index.html` autocontenido: CSS, JavaScript y Chart.js van incrustados, sin dependencias externas. Se abre con doble clic y funciona sin conexión.
 
-En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pestañas responden a los dos.
+En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pestañas responden a los dos. La cabecera indica además la fecha en que se generó el fichero, que también aparece en la banda de contexto junto al último cierre contable incorporado y en el pie con la hora.
 
 **Resumen.** KPIs del grupo, coste incurrido por mes, evolución de la caja y cuadro de mando comparativo de las promociones, con alerta de cobertura de tesorería.
 
@@ -65,6 +65,20 @@ const DATA = { ... };
 ```
 
 Todo lo que hay fuera de ese bloque es presentación y lógica de cálculo, y no necesita tocarse.
+
+## Facturas escaneadas
+
+Las facturas en PDF viven en las carpetas `FACTURAS RECIBIDAS*` y `FACTURAS EMITIDAS*`, junto al dashboard. Son escaneos sin capa de texto y su nombre de fichero no aparece en la contabilidad, así que el enlace entre cada apunte y su PDF se construye por reconocimiento óptico:
+
+```
+pip install pillow
+apt-get install poppler-utils tesseract-ocr tesseract-ocr-spa
+python ocr/mapa.py "<carpeta con FACTURAS *>"
+```
+
+`ocr/leer.py` extrae de cada PDF la fecha, los importes y el texto; `ocr/casar.py` lo empareja con el registro de facturas por importe, fecha, referencia y nombre del tercero, y solo acepta la correspondencia cuando es inequívoca. El resultado se guarda en `ocr/mapa_facturas.json`, que el ETL incorpora: cada factura enlazada se vuelve clicable en **Detalle** y en la ficha de tercero de **Clientes y proveedores**, y las que no casan se listan en **Calidad de datos** para revisión manual, sin enlace, para no mostrar nunca una factura equivocada.
+
+Los enlaces son rutas relativas, así que funcionan al abrir el dashboard desde la carpeta que contiene las facturas.
 
 ## Verificación
 
