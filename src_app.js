@@ -101,12 +101,20 @@ const ACC={PUERTO:'#1c4183',NUEVOCAMPUS:'#102C57',CARBAJOSA:'#4E6735',DONINOS_RE
  MARIN:'#2f7d72',VISTAHERMOSA:'#7a5aa6',MIRADOR:'#a8783a',LARAD:'#5b7c99',ISLARUA:'#6b7a8f',
  PTE_VILLANUEVA:'#8a6f4e',SUELO_IND:'#7b8794',NAVES:'#557089',OFICINAS:'#94a1b3',SIN_ASIGNAR:'#98a2b3'};
 const acc=c=>ACC[c]||'#102C57';
+const SOCN=Object.fromEntries((DATA.meta.sociedades||[]).map(s2=>[s2.cod,s2.nom]));
 const COL=['#102C57','#1c4183','#4E6735','#2f7d72','#a8783a','#7a5aa6','#3b6ea5','#6b7a8f','#5b7c99','#8a6f4e','#557089','#7b8794','#94a1b3','#b0bac7','#cbd5e1'];
 const inic=n=>n.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ ]/g,'').split(/\s+/).filter(w=>w.length>2&&!/^(de|del|la|el|los|las|y|para)$/i.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join('');
 function chart(id,cfg){if(CH[id])CH[id].destroy();const el=document.getElementById(id);if(el)CH[id]=new Chart(el,cfg);}
+/* valor del punto sea cual sea la orientacion del grafico */
+const val=c=>{const p=c.parsed;if(p==null)return 0;
+  if(typeof p==='number')return p;
+  return (c.chart?.options?.indexAxis==='y')?(p.x??0):(p.y??p.x??0);};
 const gopt={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
  plugins:{legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,font:{size:10.5},usePointStyle:true,pointStyle:'circle',padding:14}},
- tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+eur(c.parsed.y??c.parsed)}}},
+ tooltip:{itemSort:(a,b)=>Math.abs(val(b))-Math.abs(val(a)),
+  filter:it=>Math.abs(val(it))>0.5,
+  callbacks:{label:c=>' '+c.dataset.label+': '+eur(val(c)),
+   footer:it=>{if(it.length<2)return'';const t=it.reduce((s2,x)=>s2+val(x),0);return 'Total: '+eur(t);}}}},
  scales:{x:{grid:{display:false},ticks:{font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:14}},
  y:{grid:{color:'#eef1f6'},ticks:{font:{size:10.5},callback:v=>kEur(v)}}}};
 function tbl(head,rows){
@@ -191,7 +199,9 @@ function cRes(){
     {label:'Variación del mes',data:c.mens,type:'bar',backgroundColor:'#a8783a'}]},options:gopt});
   const lt=(SEL===CONS?P_REAL.map(p=>p.cod):[SEL]).map(c=>({n:PMAP[c].nom,v:S(c,'actAc')[NM-1]})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
   chart('c3',{type:'bar',data:{labels:lt.map(x=>x.n),datasets:[{label:'Coste incurrido acumulado',data:lt.map(x=>x.v),backgroundColor:(SEL===CONS?P_REAL.map(p=>p.cod):[SEL]).map(c=>acc(c)).slice(0,lt.length),borderRadius:3}]},
-    options:{...gopt,indexAxis:'y',plugins:{...gopt.plugins,legend:{display:false}},
+    options:{...gopt,indexAxis:'y',
+     plugins:{...gopt.plugins,legend:{display:false},
+      tooltip:{callbacks:{title:it=>it[0].label,label:c=>' Coste incurrido: '+eur(c.parsed.x)}}},
       scales:{x:{grid:{color:'#eef1f6'},ticks:{font:{size:10},callback:v=>kEur(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}}}});
   chart('c4',{type:'line',data:{labels:L,datasets:[
     {label:'Obra en curso',data:serW(codes(SEL),'exSaldo'),borderColor:'#2f7d72',backgroundColor:'rgba(47,125,114,.10)',fill:true,tension:.3,pointRadius:0},
@@ -233,6 +243,8 @@ function vPyg(){
       </div></div>`;
   }
   const poco=p.act&&Math.abs(p.resto)/Math.abs(p.act)>0.7;
+  const cs=codes(SEL);
+  const ventas=(DATA.femi||[]).filter(f=>cs.includes(f[5])&&(EJS===TODOS||f[6]==EJS)).sort((a,b)=>b[4]-a[4]);
   /* composicion del consolidado */
   let comp='',subt=periodo();
   if(SEL===CONS){
@@ -255,12 +267,58 @@ function vPyg(){
     const so=PMAP[SEL].soc||[];
     subt=`${periodo()}${so.length?' · '+so.join(' + '):''}`;
   }
+  /* ---- desglose ampliado en desplegables ---- */
+  const [wa,wb]=win();
+  const M2=MESES.slice(wa,wb+1), L2=ML.slice(wa,wb+1);
+  const sI=serW(cs,'ing'),sC=serW(cs,'cv'),sA=serW(cs,'act'),sE=serW(cs,'exSaldo');
+  const filasMes=M2.map((m,i)=>{const ing=sI[i],cv=sC[i],mg=ing-cv;
+    return {c:[{v:L2[i]},{v:ing?eur(ing):'<span class="muted">—</span>'},{v:cv?eur(cv):'<span class="muted">—</span>'},
+      {v:eur(mg),cls:sgn(mg)},{v:ing?pct1(100*mg/ing):'<span class="muted">—</span>'},
+      {v:sA[i]?eur(sA[i]):'<span class="muted">—</span>'},{v:eur(sE[i])}]};})
+   .filter((r,i)=>Math.abs(sI[i])>0.5||Math.abs(sC[i])>0.5||Math.abs(sA[i])>0.5);
+  const totM={i:sI.reduce((a,b)=>a+b,0),c:sC.reduce((a,b)=>a+b,0),a:sA.reduce((a,b)=>a+b,0)};
+  filasMes.push({cls:'tot',c:[{v:'TOTAL'},{v:eur(totM.i)},{v:eur(totM.c)},{v:eur(totM.i-totM.c),cls:sgn(totM.i-totM.c)},
+    {v:totM.i?pct1(100*(totM.i-totM.c)/totM.i):'—'},{v:eur(totM.a)},{v:eur(sE[sE.length-1])}]});
+
+  const porSoc={};
+  DATA.apuntes.filter(x=>cs.includes(x[8])&&(EJS===TODOS||x[10]==EJS)).forEach(x=>{
+    const g=String(x[5]);
+    const esIng=/^70/.test(g), esGas=/^6/.test(g)&&!/^61/.test(g);
+    if(!esIng&&!esGas)return;
+    const k=x[0]||'—'; const o=(porSoc[k]=porSoc[k]||{ing:0,gas:0});
+    if(esIng) o.ing+=(x[7]-x[6]); else o.gas+=(x[6]-x[7]);});
+  const socOrd=Object.keys(porSoc).sort((a,b)=>(porSoc[b].ing+porSoc[b].gas)-(porSoc[a].ing+porSoc[a].gas));
+
+  const rat=[
+    ['Margen bruto sobre ingresos',p.ing?pct1(p.mpct):'—','Margen de las unidades entregadas'],
+    ['Coste de ventas sobre ingresos',p.ing?pct1(100*p.cv/p.ing):'—','Cuánto del ingreso se lleva el coste de la unidad entregada'],
+    ['Facturas emitidas en el periodo',nf0.format(ventas.length),'Escrituras y facturación de obra registradas'],
+    ['Importe medio por factura emitida',ventas.length?eur(ventas.reduce((a,v)=>a+v[4],0)/ventas.length):'—','Ticket medio de las operaciones del periodo'],
+    ['Mayor operación del periodo',ventas.length?eur(ventas[0][4]):'—',ventas.length?esc(ventas[0][1]):'Sin operaciones'],
+    ['Obra en curso a cierre',eur(p.ex1),'Lo vendido pero no entregado sigue aquí, no en el margen'],
+    ['Coste incurrido acumulado',eur(p.act),'Inversión total imputada a la promoción'],
+    ['Rotación de la inversión',p.act?pct1(100*p.ing/p.act):'—','Ingresos reconocidos sobre coste incurrido'],
+  ];
+  const detalles=`
+   <div class="card"><h3>Desglose ampliado <span class="note">abre el apartado que necesites</span></h3>
+    <details><summary>Cuenta de resultados mes a mes<span class="muted small">${filasMes.length-1} meses con movimiento</span></summary>
+     <div class="dbody">${tbl([{t:'Mes',l:1},{t:'Ingresos'},{t:'Coste de ventas'},{t:'Margen'},{t:'% margen'},{t:'Coste incurrido'},{t:'Obra en curso'}],filasMes)}</div></details>
+    <details><summary>Indicadores y ratios<span class="muted small">${nf0.format(ventas.length)} operaciones en el periodo</span></summary>
+     <div class="dbody">${tbl([{t:'Indicador',l:1},{t:'Valor'},{t:'Lectura',l:1}],rat.map(r=>({c:[{v:'<b>'+r[0]+'</b>'},{v:r[1]},{v:'<span class="muted small">'+r[2]+'</span>'}]})))}</div></details>
+    <details><summary>Aportación por sociedad<span class="muted small">${socOrd.length} sociedades · ventas y gasto contabilizado, sin variación de existencias</span></summary>
+     <div class="dbody">${socOrd.length?tbl([{t:'Sociedad',l:1},{t:'Ingresos'},{t:'Gasto contabilizado'},{t:'Neto'}],
+       socOrd.map(k=>({c:[{v:'<b>'+esc(SOCN[k]||k)+'</b><div class="muted small">'+esc(k)+'</div>'},{v:eur(porSoc[k].ing)},{v:eur(porSoc[k].gas)},{v:eur(porSoc[k].ing-porSoc[k].gas),cls:sgn(porSoc[k].ing-porSoc[k].gas)}]}))
+       .concat([{cls:'tot',c:[{v:'TOTAL'},{v:eur(socOrd.reduce((a,k)=>a+porSoc[k].ing,0))},{v:eur(socOrd.reduce((a,k)=>a+porSoc[k].gas,0))},{v:''}]}])):'<div class="muted">Sin movimiento en el periodo.</div>'}</div></details>
+    <details><summary>Facturas emitidas del periodo<span class="muted small">${nf0.format(ventas.length)} operaciones · ${kEur(ventas.reduce((a,v)=>a+v[4],0))}</span></summary>
+     <div class="dbody">${ventas.length?tbl([{t:'Fecha',l:1},{t:'Cliente',l:1},{t:'Concepto',l:1},{t:'Promoción',l:1},{t:'Importe'}],
+       ventas.slice(0,400).map(v=>({c:[{v:v[3]},{v:'<b>'+esc(v[1])+'</b><div class="muted small">'+v[0]+'</div>'},{v:esc(v[2])},{v:'<span class="chip">'+esc(PMAP[v[5]]?.nom||v[5])+'</span>'},{v:eur(v[4])}]}))):'<div class="muted">Sin entregas en el periodo.</div>'}</div></details>
+   </div>`;
   return `<div class="grid2">
     <div class="card"><h3>Cuenta de resultados · ${esc(SEL===CONS?'Consolidado':PMAP[SEL].nom)} <span class="note">${esc(subt)}</span></h3><div class="cbody">${tbl([{t:'Concepto',l:1},{t:'Importe'},{t:'% s/ ingresos'}],r1)}
       <div class="legend">El margen recoge únicamente las unidades entregadas y escrituradas en el periodo. Lo vendido pero no entregado permanece en obra en curso.</div></div></div>
     <div class="card"><h3>Coste por naturaleza <span class="note">parte trazable a cuenta contable</span></h3><div class="cbody">${tbl([{t:'Naturaleza',l:1},{t:'Importe'},{t:'% s/ total'}],r2r)}
       <div class="legend">${poco?'<b>En esta promoción el desglose por naturaleza es muy limitado:</b> la mayor parte del coste entra por la cuenta común de Doñinos y por el asiento de variación de existencias, que imputa la promoción pero no la naturaleza. El detalle por capítulos está en la pestaña <i>Presupuesto vs Real</i>.':'El diario identifica la naturaleza únicamente en las cuentas específicas de cada promoción. El resto se imputa a la promoción en el asiento mensual de variación de existencias, sin desglose por naturaleza.'}</div></div></div>
-  ${comp}${ltd}
+  ${comp}${detalles}${ltd}
   <div class="grid2">
     <div class="card"><h3>Ingresos, coste de ventas y margen por mes</h3><div class="cbody"><div class="chartbox"><canvas id="p1"></canvas></div></div></div>
     <div class="card"><h3>Obra en curso</h3><div class="cbody">${tbl([{t:'Movimiento de la obra en curso',l:1},{t:'Importe'}],r3)}<div class="chartbox sm" style="margin-top:10px"><canvas id="p2"></canvas></div>
@@ -769,6 +827,126 @@ function drawAna(){
     r.slice(0,1200).map(x=>({c:[{v:x[5]},{v:esc(x[1])},{v:esc(x[2])},{v:esc(x[3])},{v:esc(x[4])},
       {v:'<span class="pill">'+x[7]+'</span>'},{v:esc(x[9])},{v:eur(x[8])}]})));
 }
+/* ====================== CONTROL DE CLIENTES Y PROVEEDORES ====================== */
+function terceros(sel){
+  const cs=codes(sel);
+  const cli=(DATA.clientes||[]).filter(x=>cs.includes(x.promo));
+  const pro=(DATA.proveedores||[]).filter(x=>cs.includes(x.promo));
+  const T=l=>l.reduce((a,x)=>({fact:a.fact+x.fact,cobr:a.cobr+x.cobr,saldo:a.saldo+x.saldo}),{fact:0,cobr:0,saldo:0});
+  const tc=T(cli), tp=T(pro);
+  const antc=(DATA.anticipos||[]).filter(x=>cs.includes(x.promo)).reduce((a,x)=>a+(x.cobr||0),0);
+  return {cli,pro,tc,tp,antc,
+    debenos:cli.filter(x=>x.saldo>0.05).reduce((a,x)=>a+x.saldo,0),
+    debemos:pro.filter(x=>x.saldo<-0.05).reduce((a,x)=>a-x.saldo,0)};
+}
+let FT={v:'pro',q:'',o:'saldo',solo:''};
+function vTer(){
+  const t=terceros(SEL);
+  const neto=t.debenos-t.debemos;
+  const pctC=t.tc.fact?100*t.tc.cobr/t.tc.fact:null;
+  const pctP=t.tp.fact?100*t.tp.cobr/t.tp.fact:null;
+  const conc=[...t.pro].filter(x=>x.saldo<-0.05).sort((a,b)=>a.saldo-b.saldo);
+  const top5=conc.slice(0,5).reduce((a,x)=>a-x.saldo,0);
+  const k=`<div class="kpis">
+   <div class="kpi"><div class="l">Facturado a clientes</div><div class="v">${kEur(t.tc.fact)}</div><div class="d">${nf0.format(t.cli.length)} cuentas de cliente</div></div>
+   <div class="kpi"><div class="l">Cobrado</div><div class="v pos">${kEur(t.tc.cobr)}</div><div class="d">${pctC!=null?pct1(pctC)+' de lo facturado':'—'}</div></div>
+   <div class="kpi"><div class="l">Nos deben</div><div class="v ${t.debenos>50000?'wrn':''}">${kEur(t.debenos)}</div><div class="d">Saldo vivo de clientes</div></div>
+   <div class="kpi"><div class="l">Facturado por proveedores</div><div class="v">${kEur(t.tp.fact)}</div><div class="d">${nf0.format(t.pro.length)} cuentas de proveedor</div></div>
+   <div class="kpi"><div class="l">Pagado</div><div class="v">${kEur(t.tp.cobr)}</div><div class="d">${pctP!=null?pct1(pctP)+' de lo facturado':'—'}</div></div>
+   <div class="kpi"><div class="l">Debemos</div><div class="v ${t.debemos>500000?'wrn':''}">${kEur(t.debemos)}</div><div class="d">Saldo vivo de proveedores</div></div>
+  </div>`;
+  const al=[];
+  al.push({t:neto<0?'':'ok',h:'Posición neta con terceros',
+    x:`Nos deben <b>${eur(t.debenos)}</b> y debemos <b>${eur(t.debemos)}</b>, una posición neta de <b>${eur(neto)}</b>. `+
+      (neto<0?`El circulante comercial financia la actividad: se ha facturado obra que aún no se ha pagado por ${eur(-neto)} más de lo que está pendiente de cobrar.`
+             :`La promoción tiene más pendiente de cobrar que de pagar.`)+
+      (t.antc?` A esto se añaden <b>${eur(t.antc)}</b> de anticipos y reservas de compradores ya cobrados en cuentas 438, que no figuran como facturación hasta la escritura.`:'')});
+  if(conc.length>=5&&t.debemos>0) al.push({t:'',h:'Concentración del saldo a pagar',
+    x:`Los cinco mayores proveedores concentran <b>${eur(top5)}</b>, el <b>${pct1(100*top5/t.debemos)}</b> de todo lo pendiente de pago: ${conc.slice(0,5).map(x=>esc(x.nom)).join(', ')}.`});
+  if(pctC!=null&&pctC>99&&t.debenos<50000) al.push({t:'ok',h:'Cobro prácticamente al día',
+    x:`Se ha cobrado el ${pct1(pctC)} de lo facturado a clientes. El saldo vivo, ${eur(t.debenos)}, es residual frente a los ${eur(t.tc.fact)} facturados.`});
+
+  const esCli=FT.v==='cli';
+  const lst0=esCli?t.cli:t.pro;
+  const q=FT.q.toLowerCase().trim();
+  let lst=lst0.filter(x=>!q||(x.nom+' '+x.cta).toLowerCase().includes(q));
+  if(FT.solo==='deuda') lst=lst.filter(x=>esCli?x.saldo>0.05:x.saldo<-0.05);
+  else if(FT.solo==='cerrado') lst=lst.filter(x=>Math.abs(x.saldo)<=0.05);
+  const sg=x=>esCli?x.saldo:-x.saldo;
+  lst=[...lst].sort((a,b)=>FT.o==='saldo'?sg(b)-sg(a):(FT.o==='fact'?b.fact-a.fact:a.nom.localeCompare(b.nom)));
+  const TT=lst.reduce((a,x)=>({fact:a.fact+x.fact,cobr:a.cobr+x.cobr,s:a.s+sg(x)}),{fact:0,cobr:0,s:0});
+  const rows=lst.slice(0,600).map(x=>{
+    const s=sg(x), pc=x.fact?100*x.cobr/x.fact:null;
+    return {c:[
+      {v:`<b>${esc(x.nom)}</b><div class="muted small">${x.cta}</div>`},
+      {v:`<span class="chip">${esc(PMAP[x.promo]?.nom||x.promo)}</span>`},
+      {v:x.fact?eur(x.fact):'<span class="muted">—</span>'},
+      {v:x.cobr?eur(x.cobr):'<span class="muted">—</span>'},
+      {v:Math.abs(s)>0.05?eur(s):'<span class="muted">0,00 €</span>',cls:Math.abs(s)>0.05?'wrn':'muted'},
+      {v:pc!=null?barPct(Math.min(pc,100),pc>=99.5?'#1b7f4d':(pc>=60?'#1c4183':'#b57407')):'<span class="muted">—</span>'}]};});
+  rows.push({cls:'tot',c:[{v:`TOTAL · ${nf0.format(lst.length)} ${esCli?'clientes':'proveedores'}`},{v:''},
+    {v:eur(TT.fact)},{v:eur(TT.cobr)},{v:eur(TT.s)},{v:TT.fact?pct1(100*TT.cobr/TT.fact):'—'}]});
+
+  return k+al.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+`
+  <div class="grid2">
+   <div class="card"><h3>Clientes <span class="note">facturado, cobrado y pendiente</span></h3><div class="cbody">
+    ${tbl([{t:'Concepto',l:1},{t:'Importe'},{t:'%'}],[
+      {c:[{v:'Facturado en el periodo'},{v:eur(t.tc.fact)},{v:'100,0 %'}]},
+      {c:[{v:'Cobrado (acumulado 2023-2026)'},{v:eur(t.tc.cobr),cls:'pos'},{v:pctC!=null?pct1(pctC):'—'}]},
+      {cls:'tot',c:[{v:'Nos deben a cierre'},{v:eur(t.debenos),cls:'wrn'},{v:t.tc.fact?pct1(100*t.debenos/t.tc.fact):'—'}]},
+      {c:[{v:'Anticipos y reservas cobrados <span class="muted small">(cuentas 438)</span>'},{v:eur(t.antc)},{v:''}]},
+    ])}
+    <div class="legend">Los anticipos y reservas se cobran antes de la escritura y se aplican contra la factura en ese momento, por eso no cuentan como facturación hasta entonces.</div></div></div>
+   <div class="card"><h3>Proveedores <span class="note">facturado, pagado y pendiente</span></h3><div class="cbody">
+    ${tbl([{t:'Concepto',l:1},{t:'Importe'},{t:'%'}],[
+      {c:[{v:'Facturado en el periodo'},{v:eur(t.tp.fact)},{v:'100,0 %'}]},
+      {c:[{v:'Pagado (acumulado 2023-2026)'},{v:eur(t.tp.cobr),cls:'neg'},{v:pctP!=null?pct1(pctP):'—'}]},
+      {cls:'tot',c:[{v:'Debemos a cierre'},{v:eur(t.debemos),cls:'wrn'},{v:t.tp.fact?pct1(100*t.debemos/t.tp.fact):'—'}]},
+      {c:[{v:'Posición neta con terceros'},{v:eur(neto),cls:sgn(neto)},{v:''}]},
+    ])}
+    <div class="legend">Un pagaré o confirming emitido figura como pagado desde su emisión, no desde el vencimiento: lo pendiente es deuda comercial viva, no calendario de salidas de caja.</div></div></div>
+  </div>
+  <div class="grid3">
+   <div class="card"><h3>Mayores saldos pendientes <span class="note">${esCli?'de cobro':'de pago'}</span></h3><div class="cbody"><div class="chartbox"><canvas id="t1"></canvas></div></div></div>
+   <div class="card"><h3>Reparto por promoción</h3><div class="cbody"><div class="chartbox"><canvas id="t2"></canvas></div></div></div>
+  </div>
+  <div class="card"><h3>Detalle por tercero <span class="note">${periodo()}</span></h3><div class="cbody">
+    <div class="toolbar">
+      <select id="tV"><option value="pro">Proveedores</option><option value="cli">Clientes</option></select>
+      <select id="tS"><option value="">Todos</option><option value="deuda">Solo con saldo vivo</option><option value="cerrado">Solo saldados</option></select>
+      <select id="tO"><option value="saldo">Ordenar por saldo</option><option value="fact">Ordenar por facturado</option><option value="nom">Ordenar por nombre</option></select>
+      <input type="search" id="tQ" placeholder="Buscar por nombre o cuenta…">
+      <span class="muted small">${nf0.format(lst.length)} de ${nf0.format(lst0.length)} · saldo ${eur(TT.s)}</span>
+    </div>
+    <div class="scroll">${tbl([{t:esCli?'Cliente':'Proveedor',l:1},{t:'Promoción',l:1},{t:'Facturado'},{t:esCli?'Cobrado':'Pagado'},{t:esCli?'Nos deben':'Debemos'},{t:'% liquidado',l:1}],rows)}</div>
+    <div class="legend">El saldo de la cuenta del tercero es la cifra cierta. Las facturas concretas que lo componen están en <b>Caja › Detalle de cobros y pagos › Pendiente</b>, y el registro completo de facturas en <b>Detalle</b>.</div>
+  </div></div>`;
+}
+function cTer(){
+  ['tV','tS','tO','tQ'].forEach(id=>{const e=document.getElementById(id);if(!e)return;
+    e.value=FT[{tV:'v',tS:'solo',tO:'o',tQ:'q'}[id]];
+    e.oninput=e.onchange=()=>{FT.v=tV.value;FT.solo=tS.value;FT.o=tO.value;FT.q=tQ.value;
+      const sc=window.scrollY;render();window.scrollTo(0,sc);};});
+  const t=terceros(SEL), esCli=FT.v==='cli';
+  const src=(esCli?t.cli:t.pro).filter(x=>esCli?x.saldo>0.05:x.saldo<-0.05)
+    .map(x=>({n:x.nom,v:esCli?x.saldo:-x.saldo,p:x.promo})).sort((a,b)=>b.v-a.v).slice(0,12);
+  chart('t1',{type:'bar',data:{labels:src.map(x=>x.n.length>34?x.n.slice(0,33)+'…':x.n),
+    datasets:[{label:esCli?'Pendiente de cobro':'Pendiente de pago',data:src.map(x=>x.v),
+      backgroundColor:src.map(x=>acc(x.p)),borderRadius:3}]},
+    options:{...gopt,indexAxis:'y',plugins:{...gopt.plugins,legend:{display:false},
+     tooltip:{callbacks:{title:it=>src[it[0].dataIndex].n,
+      label:c=>' '+(esCli?'Nos deben: ':'Debemos: ')+eur(c.parsed.x),
+      afterLabel:c=>' '+(PMAP[src[c.dataIndex].p]?.nom||'')}}},
+     scales:{x:{grid:{color:'#eef1f6'},ticks:{font:{size:10},callback:v=>kEur(v)}},
+      y:{grid:{display:false},ticks:{font:{size:10.5},autoSkip:false}}}}});
+  const byP={};(esCli?t.cli:t.pro).forEach(x=>{const v=esCli?x.saldo:-x.saldo;if(v>0.05)byP[x.promo]=(byP[x.promo]||0)+v;});
+  const ks=Object.keys(byP).sort((a,b)=>byP[b]-byP[a]);
+  chart('t2',{type:'doughnut',data:{labels:ks.map(c=>PMAP[c]?.nom||c),
+    datasets:[{data:ks.map(c=>byP[c]),backgroundColor:ks.map(c=>acc(c)),borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'58%',
+     plugins:{legend:{position:'right',labels:{boxWidth:9,boxHeight:9,font:{size:10},usePointStyle:true,pointStyle:'circle'}},
+      tooltip:{callbacks:{label:c=>' '+c.label+': '+eur(c.parsed)}}}}});
+}
 /* ============================== CALIDAD DE DATOS ============================== */
 function vCal(){
   const q=DATA.calidad, e=EJS===TODOS?'TOT':String(EJS), cq=q.porEj[e];
@@ -850,7 +1028,27 @@ function vCal(){
 function cCal(){}
 
 /* ============================== ARRANQUE ============================== */
-const TABS=[['res','Resumen'],['pyg','P&L'],['pres','Presupuesto vs Real'],['caja','Caja'],['deuda','Deuda'],['ana','Analítica'],['det','Detalle'],['cal','Calidad de datos']];
+const TABS=[['res','Resumen'],['pyg','P&L'],['pres','Presupuesto vs Real'],['caja','Caja'],['deuda','Deuda'],['ter','Clientes y proveedores'],['ana','Analítica'],['det','Detalle'],['cal','Calidad de datos']];
+function bandaInfo(){
+  const it=[];
+  if(SEL===CONS){
+    const cv=P_REAL.filter(p=>pnl(p.cod).ing>0.5).length;
+    const ob=P_REAL.filter(p=>/obra|ejecu/i.test(p.estado)).length;
+    it.push(['Sociedades',DATA.meta.sociedades.length]);
+    it.push(['Con ventas en el periodo',cv]);
+    it.push(['En obra',ob]);
+    it.push(['Unidades presupuestadas',nf0.format(P_REAL.reduce((s,p)=>s+(DATA.pres[p.cod]?.uds||0),0))]);
+    it.push(['Último cierre',DATA.meta.ultimo]);
+  } else {
+    const p=PMAP[SEL], pr=DATA.pres[SEL];
+    it.push(['Sociedades',(p.soc||[]).join(' + ')||'—']);
+    if(pr?.uds) it.push(['Unidades',nf0.format(pr.uds)]);
+    if(pr?.ventas) it.push(['Ventas presupuestadas',kEur(pr.ventas)]);
+    if(pr?.margen_pct!=null) it.push(['Margen objetivo',pct1(pr.margen_pct)]);
+    it.push(['Último cierre',DATA.meta.ultimo]);
+  }
+  return it.map(([l,v])=>`<div class="pstat"><div class="l">${esc(l)}</div><div class="v">${esc(String(v))}</div></div>`).join('');
+}
 function render(){
   document.documentElement.style.setProperty('--accent', SEL===CONS?'#102C57':acc(SEL));
   document.getElementById('subtitle').textContent=
@@ -871,16 +1069,9 @@ function render(){
   document.getElementById('pband').innerHTML=`<div class="pbin">
     ${marca}
     <div class="pmeta"><b>${esc(nom)}</b>${est}<div>${sub}</div></div>
-    <div class="pstats">
-      <div class="pstat"><div class="l">Ingresos</div><div class="v">${kEur(p.ing)}</div></div>
-      <div class="pstat"><div class="l">Coste incurrido</div><div class="v">${kEur(p.act)}</div></div>
-      <div class="pstat"><div class="l">Obra en curso</div><div class="v">${kEur(p.ex1)}</div></div>
-      <div class="pstat"><div class="l">Caja</div><div class="v">${kEur(c.fin)}</div></div>
-      <div class="pstat"><div class="l">Deuda</div><div class="v">${kEur(d.dispuesto)}</div></div>
-      ${pr?`<div class="pstat"><div class="l">Avance económico</div><div class="v">${pct1(pr.avance)}</div></div>`:''}
-    </div></div>`;
-  document.getElementById('main').innerHTML=({res:vRes,pyg:vPyg,pres:vPres,caja:vCaja,deuda:vDeuda,ana:vAna,det:vDet,cal:vCal})[TAB]();
-  ({res:cRes,pyg:cPyg,pres:cPres,caja:cCaja,deuda:cDeuda,ana:cAna,det:cDet,cal:cCal})[TAB]?.();
+    <div class="pstats">${bandaInfo()}</div></div>`;
+  document.getElementById('main').innerHTML=({res:vRes,pyg:vPyg,pres:vPres,caja:vCaja,deuda:vDeuda,ter:vTer,ana:vAna,det:vDet,cal:vCal})[TAB]();
+  ({res:cRes,pyg:cPyg,pres:cPres,caja:cCaja,deuda:cDeuda,ter:cTer,ana:cAna,det:cDet,cal:cCal})[TAB]?.();
   document.getElementById('footer').innerHTML=
    `Promociones Urbanas Montellano, S.L. · Documento de uso interno. `+
    `Fuente: diarios contables 2023-2026 de las ${DATA.meta.sociedades.length} sociedades del grupo, presupuestos operativos por promoción, analítica contable y registro de facturas emitidas y recibidas. `+

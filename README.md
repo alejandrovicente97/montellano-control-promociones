@@ -12,13 +12,15 @@ En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pes
 
 **Resumen.** KPIs del grupo, coste incurrido por mes, evolución de la caja y cuadro de mando comparativo de las promociones, con alerta de cobertura de tesorería.
 
-**P&L.** Ingresos, coste de las unidades entregadas y margen, con la composición del consolidado promoción a promoción, el desglose por naturaleza y el contraste del margen realizado frente al objetivo del estudio económico.
+**P&L.** Ingresos, coste de las unidades entregadas y margen, con la composición del consolidado promoción a promoción, el desglose por naturaleza, el contraste del margen realizado frente al objetivo del estudio económico y un desglose ampliado en desplegables con la cuenta de resultados mes a mes, los ratios, la aportación por sociedad y las facturas emitidas del periodo.
 
 **Presupuesto vs Real.** Coste real de la contabilidad frente al presupuestado, avance económico, ventas realizadas, desviaciones destacadas, detalle de partidas y capítulos de obra.
 
 **Caja.** Cobrado frente a facturado a clientes, pagado frente a facturado a proveedores, posición por cuenta bancaria y cobertura de tesorería, con el detalle de cobros y pagos en dos modos: lo ejecutado, movimiento a movimiento de las cuentas de tesorería agrupado por concepto, y lo pendiente, factura a factura de lo que queda por cobrar y por pagar.
 
 **Deuda.** Dispuesto, límite y disponible de los préstamos promotor, financiación prevista pendiente de formalizar y otra financiación del grupo.
+
+**Clientes y proveedores.** Facturado, cobrado y pagado, con el saldo vivo de cada tercero, la posición neta, la concentración del riesgo de pago y el reparto por promoción.
 
 **Analítica.** Contraste entre la analítica contable del cliente y el coste que sale de las cuentas de existencias, con el detalle factura a factura de los apuntes en los que ambos criterios no coinciden y el desglose por sección y fase que la analítica aporta y el diario no permite.
 

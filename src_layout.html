@@ -104,7 +104,9 @@ details>summary:hover{background:#f8fafd}
 .dbody{padding:0 18px 14px;max-height:520px;overflow:auto}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:11px}
 .toolbar input[type=search]{min-width:232px}
-.scroll{overflow:auto;max-height:560px}
+.scroll{overflow:auto;max-height:560px;position:relative}
+.scroll thead th{position:sticky;top:0;z-index:3;box-shadow:inset 0 -1px 0 var(--line)}
+.dbody thead th{position:sticky;top:0;z-index:3;background:#fbfcfe;box-shadow:inset 0 -1px 0 var(--line)}
 .scroll table{min-width:820px}
 .small{font-size:11.5px}
 .pill{font-size:10.5px;padding:1.5px 6px;border-radius:4px;background:#eef2f8;color:var(--ink2);font-weight:600;font-variant-numeric:tabular-nums}
