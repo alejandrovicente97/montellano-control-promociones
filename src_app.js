@@ -11,6 +11,11 @@ const MESES=DATA.meta.meses, ML=DATA.meta.mesesLbl, NM=MESES.length, EJ=DATA.met
 
 const nf=new Intl.NumberFormat('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:'always'});
 const nf0=new Intl.NumberFormat('es-ES',{maximumFractionDigits:0,useGrouping:'always'});
+const nf1=new Intl.NumberFormat('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1,useGrouping:'always'});
+const MLBL=Object.fromEntries(MESES.map((m,i)=>[m,ML[i]]));
+const MIDX=Object.fromEntries(MESES.map((m,i)=>[m,i]));
+const ULT=MESES[MESES.length-1];
+const sum=a=>(a||[]).reduce((x,y)=>x+(y||0),0);
 const z=v=>(typeof v==='number'&&Math.abs(v)<0.005)?0:v;
 const eur=v=>(v==null||isNaN(v))?'—':nf.format(z(v))+' €';
 const eur0=v=>(v==null||isNaN(v))?'—':nf0.format(z(v))+' €';
@@ -119,7 +124,7 @@ const gopt={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',
  y:{grid:{color:'#eef1f6'},ticks:{font:{size:10.5},callback:v=>kEur(v)}}}};
 function tbl(head,rows){
   let h='<table><thead><tr>'+head.map(x=>`<th class="${x.l?'l':''}">${x.t}</th>`).join('')+'</tr></thead><tbody>';
-  h+=rows.map(r=>`<tr class="${r.cls||''}">`+r.c.map((c,i)=>`<td class="${head[i].l?'l':''} ${c.cls||''}">${c.v??c}</td>`).join('')+'</tr>').join('');
+  h+=rows.map(r=>`<tr class="${r.cls||''}" ${r.attr||''}>`+r.c.map((c,i)=>`<td class="${head[i].l?'l':''} ${c.cls||''}">${c.v??c}</td>`).join('')+'</tr>').join('');
   return h+'</tbody></table>';
 }
 function barPct(p,color){const w=Math.max(0,Math.min(100,p||0));
@@ -176,7 +181,35 @@ function vRes(){
      <div class="legend"><b>Importante:</b> esto afecta solo al desglose <i>por naturaleza</i>. El coste incurrido <i>por promoción</i> está asignado al ${pct1(q.pctActAsig)}, porque la imputación la resuelve el asiento mensual de variación de existencias, que sí distingue promoción y fase.</div>
      </div></div>`;
   }
-  return k+al+`
+  /* ---------- cierre a fecha: mes vigente vs anterior vs mismo mes del año anterior ---------- */
+  const iU=NM-1, iA=NM-2, iY=NM-13;
+  const cz=codes(SEL);
+  const mv=(k,i2)=>i2>=0?cz.reduce((t2,c)=>t2+(S(c,k)[i2]||0),0):null;
+  const sv=(k,i2)=>i2>=0?cz.reduce((t2,c)=>t2+(S(c,k)[i2]||0),0):null;
+  const MET=[
+    ['Ingresos reconocidos','ing','flujo'],
+    ['Coste incurrido','act','flujo'],
+    ['Obra en curso','exSaldo','saldo'],
+    ['Posición de caja','cajaSaldo','saldo'],
+    ['Deuda con entidades','deudaSaldo','saldo'],
+  ];
+  const rc=MET.map(([nom,k])=>{
+    const a=mv(k,iU), b=mv(k,iA), c2=mv(k,iY);
+    const dm=(a!=null&&b!=null)?a-b:null, da=(a!=null&&c2!=null)?a-c2:null;
+    return {c:[{v:'<b>'+nom+'</b>'},{v:eur(a)},{v:b!=null?eur(b):'—'},
+      {v:dm!=null?eur(dm):'—',cls:sgn(dm)},{v:(dm!=null&&Math.abs(b)>1)?pct1(100*dm/Math.abs(b)):'<span class="muted">—</span>'},
+      {v:c2!=null?eur(c2):'—'},{v:da!=null?eur(da):'—',cls:sgn(da)}]};});
+  /* las tres desviaciones que explican el movimiento del coste incurrido */
+  const movP=codesReal(SEL).map(c=>({c,v:(S(c,'act')[iU]||0)-(S(c,'act')[iA]||0)}))
+    .filter(x=>Math.abs(x.v)>500).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v)).slice(0,3);
+  const dAct=(mv('act',iU)||0)-(mv('act',iA)||0);
+  const cierreCard=`<div class="card"><h3>Cierre a ${esc(ML[iU])} <span class="note">mes vigente frente al anterior y al mismo mes del año pasado</span></h3><div class="cbody">
+    ${tbl([{t:'Concepto',l:1},{t:esc(ML[iU])},{t:esc(ML[iA]||'—')},{t:'Var. mes'},{t:'%'},{t:esc(ML[iY]||'—')},{t:'Var. interanual'}],rc)}
+    ${movP.length?`<div class="legend"><b>Qué explica el movimiento del mes.</b> El coste incurrido ${dAct>=0?'sube':'baja'} ${eur0(Math.abs(dAct))} respecto a ${esc(ML[iA])}, y lo explican `+
+      movP.map(x=>`<b>${esc(PMAP[x.c].nom)}</b> con ${eur0(x.v)}`).join(', ')+
+      `, que suman ${eur0(movP.reduce((a,x)=>a+x.v,0))} de los ${eur0(dAct)} de variación.</div>`:''}
+    </div></div>`;
+  return k+al+cierreCard+`
   <div class="grid2">
     <div class="card"><h3>Coste incurrido por mes <span class="note">imputación a existencias, suelo e inmovilizado</span></h3><div class="cbody"><div class="chartbox"><canvas id="c1"></canvas></div><div class="legend">Hasta 2024 la variación de existencias se contabilizaba una vez al año, por eso el coste de 2023 y 2024 aparece concentrado en diciembre. Desde 2025 la imputación es mensual.</div></div></div>
     <div class="card"><h3>Evolución de la caja <span class="note">saldo acumulado de las cuentas de la promoción</span></h3><div class="cbody"><div class="chartbox"><canvas id="c2"></canvas></div></div></div>
@@ -839,7 +872,7 @@ function terceros(sel){
     debenos:cli.filter(x=>x.saldo>0.05).reduce((a,x)=>a+x.saldo,0),
     debemos:pro.filter(x=>x.saldo<-0.05).reduce((a,x)=>a-x.saldo,0)};
 }
-let FT={v:'pro',q:'',o:'saldo',solo:''};
+let FT={v:'pro',q:'',o:'saldo',solo:'',sel:''};
 function vTer(){
   const t=terceros(SEL);
   const neto=t.debenos-t.debemos;
@@ -877,8 +910,8 @@ function vTer(){
   const TT=lst.reduce((a,x)=>({fact:a.fact+x.fact,cobr:a.cobr+x.cobr,s:a.s+sg(x)}),{fact:0,cobr:0,s:0});
   const rows=lst.slice(0,600).map(x=>{
     const s=sg(x), pc=x.fact?100*x.cobr/x.fact:null;
-    return {c:[
-      {v:`<b>${esc(x.nom)}</b><div class="muted small">${x.cta}</div>`},
+    return {cls:'clk'+(FT.sel===x.cta?' sel':''),attr:`data-cta="${x.cta}"`,c:[
+      {v:`<b>${esc(x.nom)}</b><div class="muted small">${x.cta} <span class="lupa">ver facturas</span></div>`},
       {v:`<span class="chip">${esc(PMAP[x.promo]?.nom||x.promo)}</span>`},
       {v:x.fact?eur(x.fact):'<span class="muted">—</span>'},
       {v:x.cobr?eur(x.cobr):'<span class="muted">—</span>'},
@@ -887,7 +920,48 @@ function vTer(){
   rows.push({cls:'tot',c:[{v:`TOTAL · ${nf0.format(lst.length)} ${esCli?'clientes':'proveedores'}`},{v:''},
     {v:eur(TT.fact)},{v:eur(TT.cobr)},{v:eur(TT.s)},{v:TT.fact?pct1(100*TT.cobr/TT.fact):'—'}]});
 
-  return k+al.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+`
+  /* ---- ficha del tercero seleccionado ---- */
+  let ficha='';
+  if(FT.sel){
+    const o=(esCli?t.cli:t.pro).find(z=>z.cta===FT.sel)||(DATA.clientes.concat(DATA.proveedores)).find(z=>z.cta===FT.sel);
+    if(o){
+      const esC=(DATA.clientes||[]).some(z=>z.cta===FT.sel);
+      const fr=(DATA.frac||[]).filter(z=>z[0]===FT.sel);
+      const fe=(DATA.femi||[]).filter(z=>z[0]===FT.sel);
+      const co=(DATA.cobr||[]).filter(z=>z[0]===FT.sel);
+      const mv=(DATA.mov||[]).filter(z=>String(z[4])===FT.sel);
+      const sal=esC?o.saldo:-o.saldo;
+      const rFac = esC
+        ? tbl([{t:'Fecha',l:1},{t:'Concepto',l:1},{t:'Promoción',l:1},{t:'Importe'}],
+            fe.sort((a,b)=>b[4]-a[4]).slice(0,300).map(z=>({c:[{v:z[3]},{v:esc(z[2])},
+              {v:'<span class="chip">'+esc(PMAP[z[5]]?.nom||z[5])+'</span>'},{v:eur(z[4])}]})))
+        : tbl([{t:'Fecha',l:1},{t:'Referencia',l:1},{t:'Promoción',l:1},{t:'Importe'},{t:'Pagado'},{t:'Pendiente'},{t:'Estado',l:1},{t:'Fecha de pago',l:1}],
+            fr.sort((a,b)=>b[4]-a[4]).slice(0,300).map(z=>({c:[{v:z[3]},{v:esc(z[2])},
+              {v:'<span class="chip">'+esc(PMAP[z[8]]?.nom||z[8])+'</span>'},{v:eur(z[4])},{v:eur(z[5])},
+              {v:z[6]>0.5?eur(z[6]):'<span class="muted">—</span>',cls:z[6]>0.5?'wrn':''},
+              {v:z[7]==='Pagada'?'<span class="chip ok">Pagada</span>':(z[7]==='Parcial'?'<span class="chip warn">Parcial</span>':'<span class="chip bad">'+esc(z[7])+'</span>')},
+              {v:z[9]||'<span class="muted">—</span>'}]})));
+      const rMov = esC
+        ? tbl([{t:'Fecha',l:1},{t:'Concepto',l:1},{t:'Promoción',l:1},{t:'Cobrado'}],
+            co.sort((a,b)=>b[4]-a[4]).slice(0,300).map(z=>({c:[{v:z[3]},{v:esc(z[2])},
+              {v:'<span class="chip">'+esc(PMAP[z[5]]?.nom||z[5])+'</span>'},{v:eur(z[4]),cls:'pos'}]})))
+        : tbl([{t:'Fecha',l:1},{t:'Cuenta bancaria',l:1},{t:'Concepto',l:1},{t:'Importe'}],
+            mv.sort((a,b)=>Math.abs(b[7])-Math.abs(a[7])).slice(0,300).map(z=>({c:[{v:z[0]},{v:esc(z[1])},{v:esc(z[2])},
+              {v:eur(z[7]),cls:z[7]<0?'neg':'pos'}]})));
+      const nF=esC?fe.length:fr.length, nM=esC?co.length:mv.length;
+      ficha=`<div class="card" id="ficha" style="border-color:var(--navy)"><h3>${esc(o.nom)}
+        <span class="note">${o.cta} · ${esc(PMAP[o.promo]?.nom||o.promo)} <a href="#" id="tX" style="margin-left:12px;color:var(--navy3)">cerrar</a></span></h3><div class="cbody">
+        ${tbl([{t:'Facturado',l:1},{t:esC?'Cobrado':'Pagado'},{t:esC?'Nos deben':'Debemos'},{t:'% liquidado'},{t:'Documentos'}],[
+          {c:[{v:eur(o.fact)},{v:eur(o.cobr)},{v:Math.abs(sal)>0.05?eur(sal):'0,00 €',cls:Math.abs(sal)>0.05?'wrn':'muted'},
+              {v:o.fact?pct1(100*o.cobr/o.fact):'—'},{v:nf0.format(nF)+' facturas · '+nf0.format(nM)+(esC?' cobros':' pagos')}]}])}
+        <details open><summary>${esC?'Facturas emitidas':'Facturas recibidas'}<span class="muted small">${nf0.format(nF)}</span></summary>
+          <div class="dbody">${nF?rFac:'<div class="muted">Sin facturas registradas para esta cuenta.</div>'}</div></details>
+        <details><summary>${esC?'Cobros recibidos':'Pagos realizados'}<span class="muted small">${nf0.format(nM)}</span></summary>
+          <div class="dbody">${nM?rMov:'<div class="muted">Sin movimientos de tesorería identificados para esta cuenta.</div>'}</div></details>
+        </div></div>`;
+    }
+  }
+  return k+al.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+ficha+`
   <div class="grid2">
    <div class="card"><h3>Clientes <span class="note">facturado, cobrado y pendiente</span></h3><div class="cbody">
     ${tbl([{t:'Concepto',l:1},{t:'Importe'},{t:'%'}],[
@@ -923,9 +997,15 @@ function vTer(){
   </div></div>`;
 }
 function cTer(){
+  document.querySelectorAll('tr.clk').forEach(tr=>tr.onclick=()=>{
+    const c=tr.getAttribute('data-cta');
+    FT.sel=(FT.sel===c)?'':c; render();
+    const f=document.getElementById('ficha'); if(f)f.scrollIntoView({block:'center'});});
+  const x=document.getElementById('tX');
+  if(x)x.onclick=ev=>{ev.preventDefault();FT.sel='';render();};
   ['tV','tS','tO','tQ'].forEach(id=>{const e=document.getElementById(id);if(!e)return;
     e.value=FT[{tV:'v',tS:'solo',tO:'o',tQ:'q'}[id]];
-    e.oninput=e.onchange=()=>{FT.v=tV.value;FT.solo=tS.value;FT.o=tO.value;FT.q=tQ.value;
+    e.oninput=e.onchange=()=>{FT.v=tV.value;FT.solo=tS.value;FT.o=tO.value;FT.q=tQ.value;FT.sel='';
       const sc=window.scrollY;render();window.scrollTo(0,sc);};});
   const t=terceros(SEL), esCli=FT.v==='cli';
   const src=(esCli?t.cli:t.pro).filter(x=>esCli?x.saldo>0.05:x.saldo<-0.05)
@@ -946,6 +1026,441 @@ function cTer(){
     options:{responsive:true,maintainAspectRatio:false,cutout:'58%',
      plugins:{legend:{position:'right',labels:{boxWidth:9,boxHeight:9,font:{size:10},usePointStyle:true,pointStyle:'circle'}},
       tooltip:{callbacks:{label:c=>' '+c.label+': '+eur(c.parsed)}}}}});
+}
+/* ============================== COMERCIAL ============================== */
+const MOD=()=>DATA.mod||{};
+const EST=['Escriturada','Contratada','Reservada','Libre'];
+const ESTC={Escriturada:'#1b7f4d',Contratada:'#1c4183',Reservada:'#b57407',Libre:'#c3cbd8'};
+function comer(sel){
+  const cs=codes(sel).filter(c=>MOD()[c]);
+  let u=[],sup=0,supU=0,ptoV=0,ptoU=0;
+  cs.forEach(c=>{const m=MOD()[c];
+    u=u.concat(m.uds.map(x=>x.concat([c])));
+    sup+=m.sup.constr||0; supU+=m.sup.util||0;
+    const p=DATA.pres[c]; if(p){ptoV+=p.ventas;ptoU+=p.uds||0;}});
+  const by=e=>u.filter(x=>x[11]===e);
+  const vend=u.filter(x=>x[11]!=='Libre');
+  const val=u.reduce((a,x)=>a+x[5],0), valV=vend.reduce((a,x)=>a+x[5],0);
+  const cobr=u.reduce((a,x)=>a+x[7],0);
+  const mes={};vend.forEach(x=>{if(x[9])mes[x[9]]=(mes[x[9]]||0)+1;});
+  const ms=Object.keys(mes).sort();
+  return {u,vend,cs,sup,supU,ptoV,ptoU,val,valV,cobr,mes,ms,by,
+    libres:by('Libre').length,
+    pctV:u.length?100*vend.length/u.length:0,
+    pmR:vend.length?valV/vend.length:0,
+    pmP:ptoU?ptoV/ptoU:0,
+    m2R:sup?valV/sup:0};
+}
+let FC={est:'',q:'',prom:''};
+function vCom(){
+  const t=comer(SEL);
+  if(!t.u.length) return `<div class="card"><div class="cbody"><div class="alert">Esta selección no tiene cuadro de comercialización en el estudio económico.</div></div></div>`;
+  /* ritmo: media de los ultimos 12 meses con actividad hasta el cierre */
+  const ult=ULT;
+  const ms12=t.ms.filter(m=>m<=ult).slice(-12);
+  const v12=ms12.reduce((a,m)=>a+t.mes[m],0);
+  const ritmo=ms12.length?v12/ms12.length:0;
+  const meses=ritmo>0.05?t.libres/ritmo:null;
+  const desv=t.pmP?100*(t.pmR/1.1-t.pmP)/t.pmP:null;   /* precio realizado sin IVA vs estudio */
+  const k=`<div class="kpis">
+   <div class="kpi"><div class="l">Unidades</div><div class="v">${nf0.format(t.u.length)}</div><div class="d">${nf0.format(t.vend.length)} comercializadas · ${nf0.format(t.libres)} libres</div></div>
+   <div class="kpi"><div class="l">Comercializado</div><div class="v ${t.pctV>70?'pos':(t.pctV>30?'':'wrn')}">${pct1(t.pctV)}</div><div class="d">${kEur(t.valV)} sobre ${kEur(t.val)} c/IVA</div></div>
+   <div class="kpi"><div class="l">Ritmo de ventas</div><div class="v">${ritmo.toFixed(1)} <span style="font-size:13px;font-weight:400">uds/mes</span></div><div class="d">media de los últimos ${ms12.length} meses con actividad</div></div>
+   <div class="kpi"><div class="l">Meses para agotar</div><div class="v ${meses&&meses>36?'wrn':''}">${meses!=null?(meses>240?'—':meses.toFixed(0)):'—'}</div><div class="d">${t.libres?nf0.format(t.libres)+' unidades libres al ritmo actual':'Sin stock libre'}</div></div>
+   <div class="kpi"><div class="l">Precio medio realizado</div><div class="v">${kEur(t.pmR/1.1)}</div><div class="d">estudio ${kEur(t.pmP)}${desv!=null?' · '+(desv>=0?'+':'')+pct1(desv):''}</div></div>
+   <div class="kpi"><div class="l">Cobrado de compradores</div><div class="v">${kEur(t.cobr)}</div><div class="d">${t.valV?pct1(100*t.cobr/t.valV):'—'} del valor comercializado</div></div>
+  </div>`;
+  const al=[];
+  const full=t.cs.filter(c=>{const m=MOD()[c];return m.uds.length&&m.uds.every(x=>x[11]!=='Libre');});
+  if(full.length) al.push({t:'ok',h:'Promociones íntegramente vendidas',
+    x:`${full.map(c=>`<b>${esc(PMAP[c].nom)}</b>`).join(', ')} ${full.length>1?'tienen':'tiene'} el 100 % de las unidades comercializadas. `+
+      full.map(c=>{const m=MOD()[c],v=m.uds.reduce((a,x)=>a+x[5],0),p=m.uds.reduce((a,x)=>a+x[7],0);
+        const ing=sum(DATA.ser[c].ing);
+        return `En ${esc(PMAP[c].nom)} son ${nf0.format(m.uds.length)} unidades por ${eur0(v)} con IVA, de las que se han cobrado ${eur0(p)}; la contabilidad solo ha reconocido ${eur0(ing)} de ingreso porque la entrega está pendiente.`;}).join(' ')});
+  if(desv!=null&&Math.abs(desv)>2) al.push({t:desv<0?'':'ok',h:'Precio realizado frente al del estudio',
+    x:`El precio medio de las unidades comercializadas es de ${eur0(t.pmR/1.1)} sin IVA, ${desv>=0?'un '+pct1(desv)+' por encima':'un '+pct1(-desv)+' por debajo'} de los ${eur0(t.pmP)} del estudio económico. `+
+      (desv<0?`Sobre las ${nf0.format(t.u.length)} unidades, esa diferencia vale ${eur0(Math.abs(t.pmR/1.1-t.pmP)*t.u.length)} de ingresos.`
+             :`Sobre las ${nf0.format(t.u.length)} unidades, ese diferencial aporta ${eur0(Math.abs(t.pmR/1.1-t.pmP)*t.u.length)} de ingreso adicional si se mantiene.`)});
+  if(meses!=null&&meses>36&&t.libres>20) al.push({t:'bad',h:'Ritmo insuficiente para el stock',
+    x:`Al ritmo de ${ritmo.toFixed(1)} unidades al mes harían falta <b>${meses.toFixed(0)} meses</b> para colocar las ${nf0.format(t.libres)} unidades libres. Con el coste financiero corriendo sobre la obra, un plazo así erosiona el margen antes de la entrega.`});
+
+  /* tabla por promocion */
+  const filas=t.cs.map(c=>{
+    const m=MOD()[c], u=m.uds, n=u.length;
+    const cnt=Object.fromEntries(EST.map(e=>[e,u.filter(x=>x[11]===e).length]));
+    const v=u.reduce((a,x)=>a+x[5],0), vv=u.filter(x=>x[11]!=='Libre').reduce((a,x)=>a+x[5],0);
+    const pv=n?100*(n-cnt.Libre)/n:0;
+    const p=DATA.pres[c], pmP=p&&p.uds?p.ventas/p.uds:null;
+    const pmR=(n-cnt.Libre)?vv/(n-cnt.Libre)/1.1:null;
+    return {c:[
+      {v:`<b>${esc(PMAP[c].nom)}</b><div class="muted small">${esc(m.sup.tipo||PMAP[c].tipo)}</div>`},
+      {v:nf0.format(n)},{v:nf0.format(cnt.Escriturada)},{v:nf0.format(cnt.Contratada)},{v:nf0.format(cnt.Reservada)},
+      {v:nf0.format(cnt.Libre),cls:cnt.Libre?'wrn':'muted'},
+      {v:barPct(pv,acc(c))},
+      {v:pmR?eur(pmR):'<span class="muted">—</span>'},{v:pmP?eur(pmP):'<span class="muted">—</span>'},
+      {v:m.sup.constr?eur(v/1.1/m.sup.constr):'<span class="muted">—</span>'},
+      {v:kEur(vv)}]};});
+  const T=EST.map(e=>t.by(e).length);
+  filas.push({cls:'tot',c:[{v:'TOTAL'},{v:nf0.format(t.u.length)},{v:nf0.format(T[0])},{v:nf0.format(T[1])},{v:nf0.format(T[2])},
+    {v:nf0.format(T[3])},{v:pct1(t.pctV)},{v:eur(t.pmR/1.1)},{v:t.pmP?eur(t.pmP):'—'},{v:t.sup?eur(t.valV/1.1/t.sup):'—'},{v:kEur(t.valV)}]});
+
+  /* detalle unidad a unidad */
+  const q=FC.q.toLowerCase().trim();
+  let ud=t.u.filter(x=>(!FC.est||x[11]===FC.est)&&(!FC.prom||x[13]===FC.prom)&&
+    (!q||((x[0]||'')+' '+(x[6]||'')+' '+(x[1]||'')).toLowerCase().includes(q)));
+  ud=[...ud].sort((a,b)=>(a[13]||'').localeCompare(b[13]||'')||(a[1]||'').localeCompare(b[1]||'')||(a[0]||'').localeCompare(b[0]||''));
+  const rd=ud.slice(0,700).map(x=>({c:[
+    {v:`<b>${esc(x[0])}</b>`},{v:`<span class="chip">${esc(PMAP[x[13]]?.nom||x[13])}</span>`},{v:esc(x[1])},
+    {v:x[2]?nf1.format(x[2])+' m²':'—'},{v:x[3]?nf1.format(x[3])+' m²':'—'},
+    {v:eur(x[4])},{v:eur(x[5])},
+    {v:x[6]?esc(x[6]):'<span class="muted">—</span>'},
+    {v:x[9]||'<span class="muted">—</span>'},
+    {v:`<span class="chip" style="background:${ESTC[x[11]]}22;color:${ESTC[x[11]]}">${x[11]}</span>`},
+    {v:x[7]?eur(x[7]):'<span class="muted">—</span>'},
+    {v:x[8]>0.5?eur(x[8]):'<span class="muted">—</span>',cls:x[8]>0.5?'wrn':''}]}));
+
+  return k+al.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+`
+  <div class="grid3">
+   <div class="card"><h3>Ritmo de comercialización <span class="note">unidades vendidas por mes y acumulado</span></h3><div class="cbody"><div class="chartbox"><canvas id="q1"></canvas></div></div></div>
+   <div class="card"><h3>Estado del stock</h3><div class="cbody"><div class="chartbox"><canvas id="q2"></canvas></div></div></div>
+  </div>
+  <div class="card"><h3>Comercialización por promoción <span class="note">precio medio realizado frente al del estudio</span></h3><div class="cbody scroll">
+   ${tbl([{t:'Promoción',l:1},{t:'Uds'},{t:'Escrit.'},{t:'Contrat.'},{t:'Reserv.'},{t:'Libres'},{t:'% comercializado',l:1},
+     {t:'Precio medio real'},{t:'Precio estudio'},{t:'€/m² constr.'},{t:'Valor vendido'}],filas)}
+   <div class="legend">Escriturada es la unidad con el 90 % o más del precio cobrado o con fecha de escritura; contratada, entre el 15 % y el 90 %; reservada, por debajo del 15 % con comprador identificado. El precio medio real se muestra sin IVA para poder compararlo con el estudio económico.</div></div></div>
+  <div class="card"><h3>Detalle de unidades <span class="note">${nf0.format(ud.length)} de ${nf0.format(t.u.length)}</span></h3><div class="cbody">
+   <div class="toolbar">
+     <select id="cE"><option value="">Todos los estados</option>${EST.map(e=>`<option value="${e}">${e}</option>`).join('')}</select>
+     ${SEL===CONS?`<select id="cP"><option value="">Todas las promociones</option>${t.cs.map(c=>`<option value="${c}">${esc(PMAP[c].nom)}</option>`).join('')}</select>`:''}
+     <input type="search" id="cQ" placeholder="Buscar vivienda o comprador…">
+     <span class="muted small">valor ${eur(ud.reduce((a,x)=>a+x[5],0))} · cobrado ${eur(ud.reduce((a,x)=>a+x[7],0))}</span>
+   </div>
+   <div class="scroll">${tbl([{t:'Vivienda',l:1},{t:'Promoción',l:1},{t:'Fase',l:1},{t:'S. útil'},{t:'S. constr.'},
+     {t:'Precio s/IVA'},{t:'Total c/IVA'},{t:'Comprador',l:1},{t:'Reserva',l:1},{t:'Estado',l:1},{t:'Cobrado'},{t:'Pendiente'}],rd)}</div>
+   <div class="legend">Fuente: cuadro de compradores del estudio económico de cada promoción. Los cobros de esta tabla son los del cuadro comercial; los contabilizados están en <b>Caja</b> y en <b>Clientes y proveedores</b>.</div>
+  </div></div>`;
+}
+function cCom(){
+  const t=comer(SEL); if(!t.u.length)return;
+  ['cE','cP','cQ'].forEach(id=>{const e=document.getElementById(id);if(!e)return;
+    e.value=FC[{cE:'est',cP:'prom',cQ:'q'}[id]];
+    e.oninput=e.onchange=()=>{FC.est=(document.getElementById('cE')||{}).value||'';
+      FC.prom=(document.getElementById('cP')||{}).value||'';FC.q=(document.getElementById('cQ')||{}).value||'';
+      const s=window.scrollY;render();window.scrollTo(0,s);};});
+  const ms=t.ms.filter(m=>m>='2023-01');
+  let ac=0;const acum=ms.map(m=>ac+=t.mes[m]);
+  chart('q1',{data:{labels:ms.map(m=>MLBL[m]||m),datasets:[
+    {type:'bar',label:'Unidades vendidas en el mes',data:ms.map(m=>t.mes[m]),backgroundColor:'#1c4183',borderRadius:3,yAxisID:'y'},
+    {type:'line',label:'Acumulado',data:acum,borderColor:'#b57407',tension:.3,pointRadius:0,yAxisID:'y1'}]},
+    options:{...gopt,scales:{x:{grid:{display:false},ticks:{font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:14}},
+      y:{grid:{color:'#eef1f6'},ticks:{font:{size:10.5},precision:0}},
+      y1:{position:'right',grid:{display:false},ticks:{font:{size:10.5},precision:0}}},
+     plugins:{...gopt.plugins,tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+nf0.format(c.parsed.y)+' uds'}}}}});
+  chart('q2',{type:'doughnut',data:{labels:EST,datasets:[{data:EST.map(e=>t.by(e).length),
+    backgroundColor:EST.map(e=>ESTC[e]),borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'58%',
+     plugins:{legend:{position:'right',labels:{boxWidth:9,boxHeight:9,font:{size:11},usePointStyle:true,pointStyle:'circle'}},
+      tooltip:{callbacks:{label:c=>' '+c.label+': '+nf0.format(c.parsed)+' uds ('+pct1(100*c.parsed/t.u.length)+')'}}}}});
+}
+/* ============================== OBRA · CURVA S ============================== */
+function obra(sel){
+  const cs=codes(sel).filter(c=>MOD()[c]&&(MOD()[c].flujo||[]).length);
+  const P={},R={};
+  cs.forEach(c=>{const m=MOD()[c];
+    (m.flujo||[]).forEach(f=>{P[f[1]]=(P[f[1]]||0)+f[2];});
+    (m.obraMes||[]).forEach(o=>{R[o[0]]=(R[o[0]]||0)+o[1];});});
+  const ms=[...new Set(Object.keys(P).concat(Object.keys(R)))].sort();
+  let a=0,b=0;
+  const pa=[],ra=[];
+  ms.forEach(m=>{a+=P[m]||0;pa.push(a);b+=R[m]||0;ra.push(b);});
+  const totP=a, totR=b;
+  const iHoy=ms.indexOf(ULT);
+  const rHoy=iHoy>=0?ra[iHoy]:totR, pHoy=iHoy>=0?pa[iHoy]:0;
+  const pctR=totP?100*rHoy/totP:0, pctP=totP?100*pHoy/totP:0;
+  /* mes en que el plan alcanzaba el avance real de hoy */
+  let iEq=pa.findIndex(v=>v>=rHoy); if(iEq<0)iEq=pa.length-1;
+  /* el desfase en plazo solo tiene sentido si el alcance de la contrata y el de la
+     cuenta contable coinciden; si lo certificado supera con mucho la contrata, la
+     comparacion mide diferencia de alcance, no de calendario. */
+  const alcance = totP>0 && rHoy > totP*1.15;
+  const retraso=(iHoy>=0&&rHoy>0&&!alcance)?(iHoy-iEq):null;
+  const caps={};
+  cs.forEach(c=>MOD()[c].caps.forEach(x=>{const k=x.nom||'—';
+    const o=caps[k]=caps[k]||{pto:0,apl:0,real:0};o.pto+=x.pto;o.apl+=x.apl;o.real+=x.real;}));
+  const contrata=cs.reduce((s,c)=>s+(MOD()[c].obra.aplicada||0),0);
+  const pem=cs.reduce((s,c)=>s+(MOD()[c].obra.pem||0),0);
+  return {cs,ms,pa,ra,P,R,totP,totR,rHoy,pHoy,pctR,pctP,retraso,alcance,caps,contrata,pem,iHoy};
+}
+function vObra(){
+  const o=obra(SEL);
+  if(!o.cs.length) return `<div class="card"><div class="cbody"><div class="alert">Esta selección no tiene cronograma de obra en el estudio económico.</div></div></div>`;
+  const desvC=o.rHoy-o.pHoy;
+  const capOrd=Object.entries(o.caps).sort((a,b)=>b[1].apl-a[1].apl);
+  const tc=capOrd.reduce((a,[,v])=>({pto:a.pto+v.pto,apl:a.apl+v.apl,real:a.real+v.real}),{pto:0,apl:0,real:0});
+  const k=`<div class="kpis">
+   <div class="kpi"><div class="l">Contrata aplicada</div><div class="v">${kEur(o.contrata)}</div><div class="d">PEM ${kEur(o.pem)}${o.pem?' · coeficiente '+(o.contrata/o.pem).toLocaleString('es-ES',{maximumFractionDigits:2}):''}</div></div>
+   <div class="kpi"><div class="l">Certificado real</div><div class="v">${kEur(o.rHoy)}</div><div class="d">${pct1(o.pctR)} de la obra prevista</div></div>
+   <div class="kpi"><div class="l">Planificado a la fecha</div><div class="v">${kEur(o.pHoy)}</div><div class="d">${pct1(o.pctP)} según cronograma</div></div>
+   <div class="kpi"><div class="l">Certificado sobre contrata</div><div class="v ${o.contrata&&o.rHoy>o.contrata*1.05?'neg':''}">${o.contrata?pct1(100*o.rHoy/o.contrata):'—'}</div><div class="d">${o.contrata&&o.rHoy>o.contrata?kEur(o.rHoy-o.contrata)+' por encima de la contrata':'dentro de la contrata firmada'}</div></div>
+   <div class="kpi"><div class="l">Desfase en plazo</div><div class="v ${o.retraso!=null&&o.retraso>2?'wrn':(o.retraso!=null&&o.retraso<-1?'pos':'')}">${o.retraso!=null?(o.retraso>0?'+':'')+o.retraso+' m':'—'}</div><div class="d">${o.alcance?'alcance no comparable':(o.retraso==null?'sin obra certificada':(o.retraso>0?'meses de retraso sobre el plan':(o.retraso<0?'meses de adelanto':'en plazo')))}</div></div>
+   <div class="kpi"><div class="l">Pendiente de certificar</div><div class="v">${kEur(Math.max(0,o.totP-o.rHoy))}</div><div class="d">${o.totP&&o.rHoy<o.totP?pct1(100*(o.totP-o.rHoy)/o.totP)+' de la obra por ejecutar':'obra certificada por encima del cronograma'}</div></div>
+  </div>`;
+  const al=[];
+  if(o.alcance) al.push({t:'bad',h:'El alcance de la contrata y el de la cuenta contable no coinciden',
+    x:`Se han certificado <b>${eur0(o.rHoy)}</b> contra una contrata aplicada de <b>${eur0(o.contrata)}</b>, un ${pct1(100*o.rHoy/o.contrata)}. `+
+      `Una diferencia de esta magnitud no es un adelanto de obra: o la cuenta 606 recoge coste que el cronograma no contempla —compra de obra en curso, mejoras de comprador, obra de otra fase—, o la contrata del estudio se quedó corta. `+
+      `Mientras no se concilie, el desfase en plazo no es interpretable y la desviación hay que leerla como <b>sobrecoste de ${eur0(o.rHoy-o.contrata)}</b> sobre la contrata prevista.`});
+  if(o.retraso!=null&&o.retraso>2) al.push({t:'bad',h:'La obra va por detrás del cronograma',
+    x:`A ${MLBL[ULT]} el cronograma preveía ${eur0(o.pHoy)} certificados y se llevan ${eur0(o.rHoy)}: <b>${eur0(Math.abs(desvC))} menos</b>, equivalente a <b>${o.retraso} meses de retraso</b>. Cada mes de retraso arrastra el coste financiero del préstamo y de los fondos propios sobre el saldo dispuesto, y retrasa la escrituración que libera la caja.`});
+  else if(o.retraso!=null&&o.retraso<-1) al.push({t:'ok',h:'La obra va por delante del cronograma',
+    x:`Se llevan certificados ${eur0(o.rHoy)} frente a los ${eur0(o.pHoy)} previstos, <b>${Math.abs(o.retraso)} meses de adelanto</b>. Conviene comprobar que la tesorería y el ritmo de disposiciones del préstamo acompañan ese adelanto.`});
+  const sob=capOrd.filter(([,v])=>v.real>v.apl+500);
+  if(sob.length) al.push({t:'',h:'Capítulos por encima de la contrata',
+    x:`${sob.length} capítulos superan la contrata aplicada, en conjunto ${eur0(sob.reduce((a,[,v])=>a+v.real-v.apl,0))}: `+
+      sob.slice(0,4).map(([n,v])=>`<b>${esc(n)}</b> ${eur0(v.real-v.apl)}`).join(', ')+'.'});
+  if(!o.alcance) al.push({t:'',h:'Cómo leer esta curva',
+    x:`La línea planificada sale del cronograma de obra del estudio económico de cada promoción; la real, del movimiento mensual de las cuentas 606 de obra en la contabilidad. La comparación es de <i>coste certificado</i>, no de avance físico: un retraso en la certificación puede deberse a obra no ejecutada o a certificaciones pendientes de emitir.`});
+
+  const rows=capOrd.map(([n,v])=>{
+    const d=v.real-v.apl, p=v.apl?100*v.real/v.apl:null;
+    return {c:[{v:'<b>'+esc(n)+'</b>'},{v:eur(v.pto)},{v:eur(v.apl)},{v:eur(v.real)},
+      {v:Math.abs(d)>0.5?eur(d):'<span class="muted">—</span>',cls:d>0.5?'neg':(d<-0.5?'':'muted')},
+      {v:p!=null?barPct(Math.min(p,120),p>105?'#b3261e':(p>0?'#1c4183':'#c3cbd8')):'—'}]};});
+  rows.push({cls:'tot',c:[{v:'TOTAL'},{v:eur(tc.pto)},{v:eur(tc.apl)},{v:eur(tc.real)},
+    {v:eur(tc.real-tc.apl),cls:tc.real>tc.apl?'neg':'muted'},{v:tc.apl?pct1(100*tc.real/tc.apl):'—'}]});
+
+  const filas=o.cs.map(c=>{
+    const m=MOD()[c];
+    let pa=0,ra=0,ph=0,rh=0;
+    (m.flujo||[]).forEach(f=>{pa+=f[2];if(f[1]<=ULT)ph+=f[2];});
+    (m.obraMes||[]).forEach(x=>{ra+=x[1];if(x[0]<=ULT)rh+=x[1];});
+    const d=rh-ph;
+    return {c:[{v:`<b>${esc(PMAP[c].nom)}</b>`},{v:eur(m.obra.aplicada)},{v:eur(ph)},{v:eur(rh)},
+      {v:Math.abs(d)>0.5?eur(d):'<span class="muted">—</span>',cls:d<0?'wrn':''},
+      {v:barPct(pa?Math.min(100*rh/pa,120):0,acc(c))}]};});
+
+  return k+al.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+`
+  <div class="card"><h3>Curva S de obra <span class="note">certificado real frente a cronograma del estudio económico</span></h3><div class="cbody"><div class="chartbox" style="height:330px"><canvas id="o1"></canvas></div></div></div>
+  <div class="grid2">
+   <div class="card"><h3>Certificación mensual</h3><div class="cbody"><div class="chartbox"><canvas id="o2"></canvas></div></div></div>
+   <div class="card"><h3>Avance por promoción <span class="note">a ${esc(MLBL[ULT]||ULT)}</span></h3><div class="cbody scroll">
+    ${tbl([{t:'Promoción',l:1},{t:'Contrata'},{t:'Planificado'},{t:'Certificado'},{t:'Desviación'},{t:'% s/ contrata',l:1}],filas)}</div></div>
+  </div>
+  <div class="card"><h3>Capítulos de obra <span class="note">${capOrd.length} capítulos</span></h3><div class="cbody scroll">
+   ${tbl([{t:'Capítulo',l:1},{t:'Presupuesto'},{t:'Contrata aplicada'},{t:'Real'},{t:'Desviación'},{t:'% s/ contrata',l:1}],rows)}
+   <div class="legend">«Presupuesto» es la medición del proyecto; «contrata aplicada» es esa medición corregida por el coeficiente PEM→contrata que recoge el estudio; «real» es lo certificado según el propio estudio económico.</div></div></div>`;
+}
+function cObra(){
+  const o=obra(SEL); if(!o.cs.length)return;
+  const L=o.ms.map(m=>MLBL[m]||m);
+  const corte=o.iHoy>=0?o.iHoy:o.ms.length-1;
+  chart('o1',{data:{labels:L,datasets:[
+    {type:'line',label:'Planificado acumulado',data:o.pa,borderColor:'#8a94a8',borderDash:[5,4],tension:.25,pointRadius:0,fill:false},
+    {type:'line',label:'Certificado acumulado',data:o.ra.map((v,i)=>i<=corte?v:null),borderColor:'#1c4183',
+     backgroundColor:'rgba(28,65,131,.10)',fill:true,tension:.25,pointRadius:0,spanGaps:false}]},
+    options:{...gopt,plugins:{...gopt.plugins,
+      tooltip:{...gopt.plugins.tooltip,callbacks:{label:c=>' '+c.dataset.label+': '+eur(c.parsed.y),
+        footer:it=>{const p=it.find(x=>x.datasetIndex===0),r=it.find(x=>x.datasetIndex===1);
+          return (p&&r)?'Desviación: '+eur(r.parsed.y-p.parsed.y):'';}}}}}});
+  chart('o2',{type:'bar',data:{labels:L,datasets:[
+    {label:'Planificado',data:o.ms.map(m=>o.P[m]||0),backgroundColor:'#c3cbd8',borderRadius:2},
+    {label:'Certificado',data:o.ms.map(m=>(m<=ULT?(o.R[m]||0):null)),backgroundColor:'#1c4183',borderRadius:2}]},
+    options:gopt});
+}
+/* ==================== PROYECCIÓN · TESORERÍA, RETORNO Y ESCENARIOS ==================== */
+const HOR=18;
+function proy(sel){
+  const cs=codes(sel).filter(c=>MOD()[c]&&(MOD()[c].flujo||[]).length);
+  /* horizonte: 18 meses desde el ultimo cierre */
+  const y0=+ULT.slice(0,4), m0=+ULT.slice(5,7);
+  const ms=[];for(let i=1;i<=HOR;i++){const d=new Date(Date.UTC(y0,m0-1+i,1));
+    ms.push(d.toISOString().slice(0,7));}
+  const Z=()=>new Array(HOR).fill(0);
+  const cob=Z(),obr=Z(),noObr=Z(),intB=Z(),intF=Z(),disp=Z(),amo=Z();
+  const porP={};
+  cs.forEach(c=>{const m=MOD()[c];
+    const pl=Object.fromEntries((m.plan||[]).map(p=>[p[1],p]));
+    const fl=Object.fromEntries((m.flujo||[]).map(f=>[f[1],f]));
+    const acc2=Z().map(()=>0); porP[c]={cob:Z(),pag:Z(),net:Z()};
+    let prevS=null;
+    ms.forEach((mm,i)=>{
+      const p=pl[mm], f=fl[mm];
+      if(p){cob[i]+=p[6]; porP[c].cob[i]+=p[6];}
+      if(f){
+        obr[i]+=f[2]; noObr[i]+=f[7]; intB[i]+=f[6]; intF[i]+=f[10];
+        disp[i]+=f[4];
+        const s=f[5];
+        if(prevS!=null&&s<prevS-0.5) amo[i]+=(prevS-s);
+        prevS=s;
+        porP[c].pag[i]+=f[2]+f[7]+f[6]+f[10];
+      }
+    });
+    ms.forEach((mm,i)=>porP[c].net[i]=porP[c].cob[i]-porP[c].pag[i]);
+  });
+  const caja0=cs.reduce((t,c)=>t+(S(c,'cajaSaldo')[NM-1]||0),0);
+  /* deuda viva: saldo del cronograma al inicio y al final del horizonte */
+  let deu0=0,deu1=0,vivas=[];
+  cs.forEach(c=>{const m=MOD()[c],fl=m.flujo||[];
+    const ant=fl.filter(f=>f[1]<=ULT); if(ant.length)deu0+=ant[ant.length-1][5];
+    const fin=fl.find(f=>f[1]===ms[HOR-1]); if(fin)deu1+=fin[5];
+    if((S(c,'deudaSaldo')[NM-1]||0)>1000) vivas.push(c);});
+  const neto=[],saldo=[];let s=caja0;
+  ms.forEach((mm,i)=>{
+    const n=cob[i]+disp[i]-obr[i]-noObr[i]-intB[i]-intF[i]-amo[i];
+    neto.push(n); s+=n; saldo.push(s);});
+  const min=Math.min(...saldo), iMin=saldo.indexOf(min);
+  return {cs,ms,cob,obr,noObr,intB,intF,disp,amo,neto,saldo,caja0,min,iMin,porP,deu0,deu1,vivas};
+}
+function retorno(sel){
+  const cs=codes(sel).filter(c=>DATA.pres[c]);
+  const r=cs.map(c=>{
+    const p=DATA.pres[c], m=MOD()[c]||{}, sup=(m.sup||{}).constr||0;
+    const fl=m.flujo||[];
+    const ffpp=fl.length?Math.max(...fl.map(f=>f[9])):0;
+    const pl=m.plan||[];
+    /* flujo mensual del proyecto: cobros de compradores menos coste (obra + no obra) */
+    const F=[];
+    const key=[...new Set(pl.map(x=>x[1]).concat(fl.map(x=>x[1])))].sort();
+    const plM=Object.fromEntries(pl.map(x=>[x[1],x])), flM=Object.fromEntries(fl.map(x=>[x[1],x]));
+    key.forEach(k=>{const a=plM[k],b=flM[k];
+      F.push((a?a[6]:0)-((b?b[2]+b[7]:0)));});
+    return {cod:c,nom:PMAP[c].nom,ventas:p.ventas,coste:p.coste,margen:p.margen,mpct:p.margen_pct,
+      uds:p.uds,sup,ffpp,tir:tirAnual(F),
+      cM2:sup?p.coste/sup:null,vM2:sup?p.ventas/sup:null,mM2:sup?p.margen/sup:null,
+      mult:ffpp?1+p.margen/ffpp:null, roi:p.coste?100*p.margen/p.coste:null,
+      meses:F.length};
+  });
+  return r;
+}
+function tirAnual(F){
+  if(!F||F.length<3) return null;
+  if(!F.some(v=>v>0)||!F.some(v=>v<0)) return null;
+  const van=r=>F.reduce((a,v,i)=>a+v/Math.pow(1+r,i),0);
+  let lo=-0.95,hi=1.5;
+  if(van(lo)*van(hi)>0) return null;
+  for(let i=0;i<200;i++){const mid=(lo+hi)/2; if(van(lo)*van(mid)<=0)hi=mid;else lo=mid;}
+  const rm=(lo+hi)/2;
+  const a=Math.pow(1+rm,12)-1;
+  return (isFinite(a)&&a>-0.99&&a<10)?100*a:null;
+}
+let FE={obra:10,precio:-5,tipo:100};
+function vProy(){
+  const p=proy(SEL), R=retorno(SEL);
+  if(!p.cs.length) return `<div class="card"><div class="cbody"><div class="alert">Esta selección no tiene flujo financiero en el estudio económico.</div></div></div>`;
+  const T=k=>sum(p[k]);
+  const nec=p.min<0?-p.min:0;
+  const lim=p.cs.reduce((t,c)=>t+((MOD()[c].fin||{}).limite||0),0);
+  const disp0=DATA.deuda?sum((DATA.deuda||[]).filter(x=>p.cs.includes(x.promo)).map(x=>Math.max(0,(x.limite||0)-(x.dispuesto||0)))):0;
+  const k=`<div class="kpis">
+   <div class="kpi"><div class="l">Caja de partida</div><div class="v">${kEur(p.caja0)}</div><div class="d">saldo a ${esc(MLBL[ULT]||ULT)}</div></div>
+   <div class="kpi"><div class="l">Cobros previstos ${HOR} m</div><div class="v pos">${kEur(T('cob'))}</div><div class="d">contratos, aplazados y escrituras</div></div>
+   <div class="kpi"><div class="l">Pagos previstos ${HOR} m</div><div class="v neg">${kEur(T('obr')+T('noObr')+T('intB')+T('intF'))}</div><div class="d">obra ${kEur(T('obr'))} · resto ${kEur(T('noObr')+T('intB')+T('intF'))}</div></div>
+   <div class="kpi"><div class="l">Disposición prevista</div><div class="v">${kEur(T('disp'))}</div><div class="d">amortización ${kEur(T('amo'))} · límite ${kEur(lim)}</div></div>
+   <div class="kpi"><div class="l">Saldo a ${HOR} meses</div><div class="v ${p.saldo[HOR-1]<0?'neg':'pos'}">${kEur(p.saldo[HOR-1])}</div><div class="d">flujo neto ${kEur(sum(p.neto))}</div></div>
+   <div class="kpi"><div class="l">Máxima necesidad</div><div class="v ${nec>0?'neg':'pos'}">${nec>0?kEur(nec):'sin déficit'}</div><div class="d">${nec>0?'en '+esc(MLBL[p.ms[p.iMin]]||p.ms[p.iMin]):'la caja no entra en negativo'}</div></div>
+   <div class="kpi"><div class="l">Deuda viva proyectada</div><div class="v ${p.deu1>p.deu0?'wrn':''}">${kEur(p.deu1)}</div><div class="d">hoy ${kEur(p.deu0)} · ${p.deu1>p.deu0?'crece '+kEur(p.deu1-p.deu0):'se reduce '+kEur(p.deu0-p.deu1)}</div></div>
+  </div>`;
+  const al=[];
+  if(nec>0) al.push({t:'bad',h:'Punto de máxima necesidad de financiación',
+    x:`Partiendo de ${eur0(p.caja0)} de caja, el cronograma del estudio lleva el saldo a <b>${eur0(p.min)}</b> en <b>${esc(MLBL[p.ms[p.iMin]]||p.ms[p.iMin])}</b>. `+
+      `Hacen falta <b>${eur0(nec)}</b> adicionales para llegar a ese punto sin tensión, y el disponible actual de línea es de ${eur0(disp0)}. `+
+      `Este es el número que hay que llevar a la mesa de negociación con la entidad, con ${Math.max(1,p.iMin)} meses de antelación.`});
+  else al.push({t:'ok',h:'La caja aguanta el horizonte',
+    x:`Con la caja de partida y el calendario de cobros y disposiciones del estudio, el saldo no entra en negativo en los próximos ${HOR} meses; el mínimo es de ${eur0(p.min)} en ${esc(MLBL[p.ms[p.iMin]]||p.ms[p.iMin])}.`});
+  const pend=p.cs.filter(c=>!p.vivas.includes(c)&&((MOD()[c].fin||{}).limite||0)>0);
+  if(pend.length&&p.deu1>p.deu0) al.push({t:'bad',h:'Financiación que el cronograma da por hecha y todavía no está formalizada',
+    x:`El plan lleva la deuda viva de ${eur0(p.deu0)} a <b>${eur0(p.deu1)}</b> en ${HOR} meses. Ese salto se apoya en préstamos promotor de `+
+      pend.map(c=>`<b>${esc(PMAP[c].nom)}</b> (${eur0((MOD()[c].fin||{}).limite||0)})`).join(', ')+
+      ` que a día de hoy no tienen saldo dispuesto en la contabilidad. Sin esas formalizaciones, el saldo de caja de este calendario no se sostiene: la caja proyectada de ${eur0(p.saldo[HOR-1])} incorpora ${eur0(sum(p.disp))} de disposiciones.`});
+  al.push({t:'',h:'Qué es esta proyección y qué no',
+    x:`Es el cronograma del estudio económico de cada promoción proyectado desde el último cierre real, no una previsión revisada con la obra en la mano. Los cobros son los del cuadro de compradores —10 % a contrato, aplazados y 80 % a escritura—; los pagos, el avance de obra y los gastos no imputables a obra del propio modelo. Si la obra va con retraso, este calendario se desplaza: cotéjalo con la pestaña <b>Obra</b>.`});
+
+  const rows=p.ms.map((m,i)=>({cls:i===p.iMin?'sub2':'',c:[
+    {v:esc(MLBL[m]||m)},
+    {v:p.cob[i]?eur(p.cob[i]):'<span class="muted">—</span>',cls:'pos'},
+    {v:p.obr[i]?eur(-p.obr[i]):'<span class="muted">—</span>',cls:'neg'},
+    {v:(p.noObr[i]+p.intB[i]+p.intF[i])?eur(-(p.noObr[i]+p.intB[i]+p.intF[i])):'<span class="muted">—</span>',cls:'neg'},
+    {v:p.disp[i]?eur(p.disp[i]):'<span class="muted">—</span>'},
+    {v:p.amo[i]?eur(-p.amo[i]):'<span class="muted">—</span>'},
+    {v:eur(p.neto[i]),cls:sgn(p.neto[i])},
+    {v:eur(p.saldo[i]),cls:p.saldo[i]<0?'neg':''}]}));
+  rows.push({cls:'tot',c:[{v:'TOTAL '+HOR+' MESES'},{v:eur(T('cob'))},{v:eur(-T('obr'))},
+    {v:eur(-(T('noObr')+T('intB')+T('intF')))},{v:eur(T('disp'))},{v:eur(-T('amo'))},
+    {v:eur(sum(p.neto)),cls:sgn(sum(p.neto))},{v:eur(p.saldo[HOR-1])}]});
+
+  /* ---- retorno ---- */
+  const rr=R.filter(x=>x.ventas>0).sort((a,b)=>b.margen-a.margen);
+  const tR=rr.reduce((a,x)=>({v:a.v+x.ventas,c:a.c+x.coste,m:a.m+x.margen,s:a.s+x.sup,f:a.f+x.ffpp,u:a.u+(x.uds||0)}),{v:0,c:0,m:0,s:0,f:0,u:0});
+  const tblR=tbl([{t:'Promoción',l:1},{t:'Ventas'},{t:'Coste'},{t:'Margen'},{t:'% margen'},{t:'ROI s/ coste'},
+     {t:'TIR anual'},{t:'Múltiplo s/ FFPP'},{t:'Coste €/m²'},{t:'Venta €/m²'},{t:'Margen €/m²'}],
+    rr.map(x=>({c:[{v:'<b>'+esc(x.nom)+'</b><div class="muted small">'+nf0.format(x.uds||0)+' uds · '+nf0.format(x.sup)+' m²</div>'},
+      {v:kEur(x.ventas)},{v:kEur(x.coste)},{v:kEur(x.margen),cls:sgn(x.margen)},{v:pct1(x.mpct)},
+      {v:x.roi!=null?pct1(x.roi):'—'},{v:x.tir==null?'<span class="muted">—</span>':(x.tir>150?'<span class="muted" title="El cronograma sitúa cobros antes que desembolsos, la TIR pierde significado">n.s.</span>':pct1(x.tir))},
+      {v:x.mult!=null?x.mult.toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+'×':'—'},
+      {v:x.cM2?eur(x.cM2):'—'},{v:x.vM2?eur(x.vM2):'—'},{v:x.mM2?eur(x.mM2):'—'}]}))
+      .concat([{cls:'tot',c:[{v:'TOTAL'},{v:kEur(tR.v)},{v:kEur(tR.c)},{v:kEur(tR.m)},{v:tR.v?pct1(100*tR.m/tR.v):'—'},
+      {v:tR.c?pct1(100*tR.m/tR.c):'—'},{v:''},{v:tR.f?(1+tR.m/tR.f).toLocaleString('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2})+'×':'—'},
+      {v:tR.s?eur(tR.c/tR.s):'—'},{v:tR.s?eur(tR.v/tR.s):'—'},{v:tR.s?eur(tR.m/tR.s):'—'}]}]));
+
+  /* ---- escenarios ---- */
+  const eo=FE.obra/100, ep=FE.precio/100, et=FE.tipo/10000;
+  const esc2=rr.map(x=>{
+    const m=MOD()[x.cod]||{}, contrata=(m.obra||{}).aplicada||x.coste*0.7;
+    const fl=m.flujo||[];
+    const saldoMedio=fl.length?fl.reduce((a,f)=>a+f[5],0)/fl.length:0;
+    const anios=fl.length/12;
+    const dObra=-contrata*eo, dPrec=x.ventas*ep, dTipo=-saldoMedio*et*anios;
+    const nm=x.margen+dObra+dPrec+dTipo;
+    return {...x,dObra,dPrec,dTipo,nm,npct:x.ventas*(1+ep)?100*nm/(x.ventas*(1+ep)):null};
+  });
+  const tE=esc2.reduce((a,x)=>({m:a.m+x.margen,o:a.o+x.dObra,p:a.p+x.dPrec,t:a.t+x.dTipo,n:a.n+x.nm,v:a.v+x.ventas*(1+ep)}),{m:0,o:0,p:0,t:0,n:0,v:0});
+  const tblE=tbl([{t:'Promoción',l:1},{t:'Margen base'},{t:'Obra '+(FE.obra>=0?'+':'')+FE.obra+' %'},
+     {t:'Precios '+(FE.precio>=0?'+':'')+FE.precio+' %'},{t:'Tipo '+(FE.tipo>=0?'+':'')+FE.tipo+' pb'},{t:'Margen resultante'},{t:'% margen'}],
+    esc2.map(x=>({c:[{v:'<b>'+esc(x.nom)+'</b>'},{v:kEur(x.margen)},{v:kEur(x.dObra),cls:sgn(x.dObra)},
+      {v:kEur(x.dPrec),cls:sgn(x.dPrec)},{v:kEur(x.dTipo),cls:sgn(x.dTipo)},
+      {v:kEur(x.nm),cls:x.nm<0?'neg':(x.nm<x.margen*0.5?'wrn':'pos')},{v:x.npct!=null?pct1(x.npct):'—'}]}))
+    .concat([{cls:'tot',c:[{v:'TOTAL'},{v:kEur(tE.m)},{v:kEur(tE.o)},{v:kEur(tE.p)},{v:kEur(tE.t)},
+      {v:kEur(tE.n),cls:tE.n<0?'neg':'pos'},{v:tE.v?pct1(100*tE.n/tE.v):'—'}]}]));
+  const pierde=esc2.filter(x=>x.nm<0);
+  const alE=pierde.length?`<div class="alert bad" style="margin:12px 0 0"><b>Promociones en pérdidas en este escenario.</b> ${pierde.map(x=>`<b>${esc(x.nom)}</b> ${eur0(x.nm)}`).join(', ')}. El margen del conjunto pasa de ${eur0(tE.m)} a ${eur0(tE.n)}, una caída de ${pct1(tE.m?100*(tE.m-tE.n)/tE.m:0)}.</div>`
+    :`<div class="alert ok" style="margin:12px 0 0"><b>Ninguna promoción entra en pérdidas.</b> El margen del conjunto pasa de ${eur0(tE.m)} a ${eur0(tE.n)}, una caída de ${pct1(tE.m?100*(tE.m-tE.n)/tE.m:0)}. El colchón se lo lleva ${esc((esc2.slice().sort((a,b)=>(a.nm/Math.max(a.margen,1))-(b.nm/Math.max(b.margen,1)))[0]||{}).nom||'')}, la más sensible.</div>`;
+
+  return k+al.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+`
+  <div class="card"><h3>Tesorería proyectada a ${HOR} meses <span class="note">desde ${esc(MLBL[ULT]||ULT)}</span></h3><div class="cbody"><div class="chartbox" style="height:320px"><canvas id="p1"></canvas></div></div></div>
+  <div class="card"><h3>Calendario de caja <span class="note">el mes sombreado es el de máxima necesidad</span></h3><div class="cbody scroll">
+   ${tbl([{t:'Mes',l:1},{t:'Cobros'},{t:'Obra'},{t:'Resto de pagos'},{t:'Disposición'},{t:'Amortización'},{t:'Flujo neto'},{t:'Saldo'}],rows)}
+   <div class="legend">«Resto de pagos» agrupa los gastos no imputables a obra, los intereses del préstamo promotor y el coste de los fondos propios que recoge el modelo. La amortización se deduce de la caída del saldo vivo del préstamo en el cronograma.</div></div></div>
+  <div class="card"><h3>Rendimiento de la promoción como inversión <span class="note">sobre el estudio económico completo, no sobre lo ejecutado</span></h3><div class="cbody scroll">
+   ${tblR}
+   <div class="legend">La TIR se calcula sobre el flujo mensual del modelo —cobros de compradores menos coste de obra y de gastos no imputables a obra— y se anualiza; se marca como no significativa cuando el cronograma sitúa cobros antes que desembolsos y el resultado pierde sentido económico. El múltiplo es el margen sobre la punta máxima de fondos propios del cronograma, más uno. Los importes por metro cuadrado usan la superficie total construida del proyecto.</div></div></div>
+  <div class="card"><h3>Escenarios <span class="note">mueve los tres parámetros y mira el margen</span></h3><div class="cbody">
+   <div class="toolbar">
+     <label class="muted small">Coste de obra
+       <select id="eO">${[0,5,10,15,20].map(v=>`<option value="${v}">${v>0?'+':''}${v} %</option>`).join('')}</select></label>
+     <label class="muted small">Precios de venta
+       <select id="eP">${[0,-2.5,-5,-7.5,-10,5].map(v=>`<option value="${v}">${v>0?'+':''}${v} %</option>`).join('')}</select></label>
+     <label class="muted small">Tipo de interés
+       <select id="eT">${[0,50,100,150,200].map(v=>`<option value="${v}">${v>0?'+':''}${v} pb</option>`).join('')}</select></label>
+   </div>
+   ${tblE}${alE}
+   <div class="legend">El impacto de obra se aplica sobre la contrata aplicada de cada promoción; el de precios, sobre las ventas del estudio; el de tipos, sobre el saldo medio del préstamo a lo largo del cronograma y por los años que dura. Es una sensibilidad de primer orden: no recalcula el calendario ni el ritmo de ventas.</div>
+  </div></div>`;
+}
+function cProy(){
+  const p=proy(SEL); if(!p.cs.length)return;
+  ['eO','eP','eT'].forEach(id=>{const e=document.getElementById(id);if(!e)return;
+    e.value=String(FE[{eO:'obra',eP:'precio',eT:'tipo'}[id]]);
+    e.onchange=()=>{FE.obra=+eO.value;FE.precio=+eP.value;FE.tipo=+eT.value;
+      const s=window.scrollY;render();window.scrollTo(0,s);};});
+  const L=p.ms.map(m=>MLBL[m]||m);
+  chart('p1',{data:{labels:L,datasets:[
+    {type:'bar',label:'Cobros',data:p.cob,backgroundColor:'#1b7f4d',borderRadius:2,stack:'a'},
+    {type:'bar',label:'Disposición de préstamo',data:p.disp,backgroundColor:'#7a5aa6',borderRadius:2,stack:'a'},
+    {type:'bar',label:'Obra',data:p.obr.map(v=>-v),backgroundColor:'#b3261e',borderRadius:2,stack:'a'},
+    {type:'bar',label:'Resto de pagos',data:p.ms.map((m,i)=>-(p.noObr[i]+p.intB[i]+p.intF[i])),backgroundColor:'#e0857f',borderRadius:2,stack:'a'},
+    {type:'bar',label:'Amortización',data:p.amo.map(v=>-v),backgroundColor:'#8a6f4e',borderRadius:2,stack:'a'},
+    {type:'line',label:'Saldo de caja',data:p.saldo,borderColor:'#102C57',borderWidth:2,tension:.25,pointRadius:0,yAxisID:'y'}]},
+    options:{...gopt,scales:{...gopt.scales,x:{...gopt.scales.x,stacked:true},y:{...gopt.scales.y,stacked:false}}}});
 }
 /* ============================== CALIDAD DE DATOS ============================== */
 function vCal(){
@@ -1028,7 +1543,7 @@ function vCal(){
 function cCal(){}
 
 /* ============================== ARRANQUE ============================== */
-const TABS=[['res','Resumen'],['pyg','P&L'],['pres','Presupuesto vs Real'],['caja','Caja'],['deuda','Deuda'],['ter','Clientes y proveedores'],['ana','Analítica'],['det','Detalle'],['cal','Calidad de datos']];
+const TABS=[['res','Resumen'],['pyg','P&L'],['pres','Presupuesto vs Real'],['caja','Caja'],['com','Comercial'],['obr','Obra'],['pro','Proyección'],['deuda','Deuda'],['ter','Clientes y proveedores'],['ana','Analítica'],['det','Detalle'],['cal','Calidad de datos']];
 function bandaInfo(){
   const it=[];
   if(SEL===CONS){
@@ -1070,8 +1585,8 @@ function render(){
     ${marca}
     <div class="pmeta"><b>${esc(nom)}</b>${est}<div>${sub}</div></div>
     <div class="pstats">${bandaInfo()}</div></div>`;
-  document.getElementById('main').innerHTML=({res:vRes,pyg:vPyg,pres:vPres,caja:vCaja,deuda:vDeuda,ter:vTer,ana:vAna,det:vDet,cal:vCal})[TAB]();
-  ({res:cRes,pyg:cPyg,pres:cPres,caja:cCaja,deuda:cDeuda,ter:cTer,ana:cAna,det:cDet,cal:cCal})[TAB]?.();
+  document.getElementById('main').innerHTML=({res:vRes,pyg:vPyg,pres:vPres,caja:vCaja,com:vCom,obr:vObra,pro:vProy,deuda:vDeuda,ter:vTer,ana:vAna,det:vDet,cal:vCal})[TAB]();
+  ({res:cRes,pyg:cPyg,pres:cPres,caja:cCaja,com:cCom,obr:cObra,pro:cProy,deuda:cDeuda,ter:cTer,ana:cAna,det:cDet,cal:cCal})[TAB]?.();
   document.getElementById('footer').innerHTML=
    `Promociones Urbanas Montellano, S.L. · Documento de uso interno. `+
    `Fuente: diarios contables 2023-2026 de las ${DATA.meta.sociedades.length} sociedades del grupo, presupuestos operativos por promoción, analítica contable y registro de facturas emitidas y recibidas. `+

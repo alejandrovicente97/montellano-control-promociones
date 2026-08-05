@@ -756,6 +756,167 @@ if _F:
 else:
     print('  aviso: no hay ANALITICA*.xlsx en BASE; la pestana Analitica quedara vacia')
 
+
+
+# =============================================================================
+# FASE 5 - Modelo de promocion: comercial, obra, planning y flujo financiero
+#   Lee de cada estudio economico las hojas DATOS GENERALES, PLANNING MENSUAL,
+#   FLUJO FINANCIERO, CAPITULOS OBRA y COMPRADORES. No altera ninguna cifra
+#   contable: alimenta las pestanas Comercial, Obra y Proyeccion.
+# =============================================================================
+import datetime as dt
+def fecha(x):
+    if isinstance(x, dt.datetime): return x if x.year > 2000 else None
+    return None
+def ym(x):
+    f = fecha(x); return f.strftime("%Y-%m") if f else None
+def numx(x):
+    try:
+        f = float(x); return None if (math.isnan(f) or math.isinf(f)) else f
+    except: return None
+
+FIL={'Puerto de Salamanca':'PUERTO','Residencial Nuevo Campus':'NUEVOCAMPUS','Jardines de Carbajosa':'CARBAJOSA',
+ 'Doñinos Residencial':'DONINOS_RES','Residencial El Marín':'MARIN','Residencial Vistahermosa':'VISTAHERMOSA',
+ 'Mirador de Vistahermosa':'MIRADOR','La Rad':'LARAD'}
+
+MOD={}
+for f in sorted(glob.glob(os.path.join(BASE,'Presupuestos','*.xlsx'))):
+    cod=FIL.get(os.path.splitext(os.path.basename(f))[0])
+    if not cod: continue
+    wb=openpyxl.load_workbook(f,read_only=True,data_only=True)
+    H=wb.sheetnames
+    m={}
+
+    # ---------- DATOS GENERALES ----------
+    dg={}
+    if 'DATOS GENERALES' in H:
+        for r in wb['DATOS GENERALES'].iter_rows(values_only=True):
+            if r[0] is None: continue
+            v=next((x for x in r[1:4] if x is not None),None)
+            if v is not None: dg[str(r[0]).strip()]=v
+    m['sup']=dict(
+      constr=r2(dg.get('Sup. total construida')), sr=r2(dg.get('Sup. construida sobre rasante (SR)')),
+      util=r2(dg.get('Sup. útil viviendas')), parcela=r2(dg.get('Sup. parcela')),
+      edificable=r2(dg.get('Sup. edificable (planeamiento)')), urb=r2(dg.get('Sup. urbanización exterior')),
+      uds=int(numx(dg.get('Nº total viviendas')) or 0), gar=int(numx(dg.get('Nº plazas garaje (total)')) or 0),
+      pem_m2=r2(dg.get('PEM €/m² sobre rasante')), tipo=str(dg.get('Tipología') or ''),
+      arq=str(dg.get('Arquitecto') or ''), proy=ym(dg.get('Fecha proyecto')))
+
+    # ---------- CAPITULOS OBRA ----------
+    caps=[]; par={}
+    if 'CAPITULOS OBRA' in H:
+        ws=wb['CAPITULOS OBRA']; hdr=False
+        for r in ws.iter_rows(values_only=True):
+            if r[0] and str(r[0]).strip()=='#': hdr=True; continue
+            if not hdr:
+                if r[1] and isinstance(r[1],str): par[r[1].strip()]=r[2]
+                continue
+            if r[0] is None or not str(r[0]).strip().isdigit(): continue
+            caps.append(dict(n=int(r[0]),nom=str(r[1] or '').strip(),
+              pto=r2(r[3]),apl=r2(r[6]),real=r2(r[7]),desv=r2(r[8])))
+    m['caps']=caps
+    m['obra']=dict(pem=r2(par.get('PEM proyecto')),pto=r2(par.get('Total presupuestado')),
+      firmada=r2(par.get('Contrata firmada')),aplicada=r2(par.get('CONTRATA APLICADA')),
+      mult=r2(par.get('Multiplicador PEM→Contrata')) or r2(par.get('Multiplicador PEM→Cont')))
+
+    # ---------- PLANNING MENSUAL ----------
+    pl=[]
+    if 'PLANNING MENSUAL' in H:
+        ws=wb['PLANNING MENSUAL']; rows=list(ws.iter_rows(values_only=True))
+        hi=next((i for i,r in enumerate(rows) if r and str(r[0]).strip()=='Mes'),None)
+        if hi is not None:
+            hd=[str(x).strip() if x else '' for x in rows[hi]]
+            iTot=hd.index('TOTAL mes') if 'TOTAL mes' in hd else 13
+            iIng=hd.index('TOTAL ingr.') if 'TOTAL ingr.' in hd else None
+            iC10=hd.index('Contrato 10%') if 'Contrato 10%' in hd else None
+            iBim=hd.index('Bimensuales') if 'Bimensuales' in hd else None
+            iEsc=hd.index('Escritura 80%') if 'Escritura 80%' in hd else None
+            iEje=hd.index('TOTAL ejec.') if 'TOTAL ejec.' in hd else None
+            for r in rows[hi+1:]:
+                if not r or r[0] is None: continue
+                if not str(r[0]).strip().isdigit(): continue
+                mm=ym(r[1])
+                if not mm: continue
+                pl.append([int(r[0]),mm,r2(r[iTot]),
+                  r2(r[iC10]) if iC10 else 0.0, r2(r[iBim]) if iBim else 0.0,
+                  r2(r[iEsc]) if iEsc else 0.0, r2(r[iIng]) if iIng else 0.0,
+                  r2(r[iEje]) if iEje else 0.0])
+    m['plan']=pl
+
+    # ---------- FLUJO FINANCIERO ----------
+    fl=[]; fp={}
+    if 'FLUJO FINANCIERO' in H:
+        ws=wb['FLUJO FINANCIERO']; rows=list(ws.iter_rows(values_only=True))
+        hi=next((i for i,r in enumerate(rows) if r and str(r[0]).strip()=='Mes'),None)
+        for r in rows[:hi or 0]:
+            for a,b in [(1,3),(6,7)]:
+                if len(r)>b and isinstance(r[a],str) and r[b] is not None: fp[r[a].strip()]=r[b]
+        if hi is not None:
+            for r in rows[hi+1:]:
+                if not r or r[0] is None or not str(r[0]).strip().isdigit(): continue
+                mm=ym(r[1])
+                if not mm: continue
+                fl.append([int(r[0]),mm,r2(r[2]),r2(r[3]),r2(r[5]),r2(r[6]),r2(r[7]),
+                           r2(r[9]),r2(r[10]),r2(r[11]),r2(r[12])])
+    m['flujo']=fl
+    m['fin']=dict(limite=r2(fp.get('Límite préstamo promotor')),tipo=r2(fp.get('Tipo interés préstamo (anual)')),
+      apertura=r2(fp.get('Comisión apertura €')),tipoFP=r2(fp.get('Tipo FFPP (anual)')),
+      contrata=r2(fp.get('Contrata')),mesObra=r2(fp.get('Mes inicio obra')),mesFin=r2(fp.get('Mes último cronograma')))
+
+    # ---------- COMPRADORES ----------
+    uds=[]
+    for h in [x for x in H if x.startswith('COMPRADORES')]:
+        fase=h.replace('COMPRADORES','').strip() or 'Única'
+        ws=wb[h]; rows=list(ws.iter_rows(values_only=True))
+        hi=next((i for i,r in enumerate(rows) if r and str(r[0]).strip()=='#'),None)
+        if hi is None: continue
+        hd=[str(x).strip() if x else '' for x in rows[hi]]
+        ix=lambda n,d: hd.index(n) if n in hd else d
+        iV,iSU,iSC=ix('Vivienda',2),ix('S.útil',5),ix('S.constr',12)
+        iPB,iPT,iIVA=ix('Precio base',13),ix('Precio total',15),ix('Total c/IVA',18)
+        iCo,iPg,iPd=ix('Comprador 1',19),ix('Pagado',23),ix('Pendiente',24)
+        iFr,iMe=ix('Fecha reserva',25),ix('Mejoras s/IVA',26)
+        iEs,iFe=ix('Estado',30),ix('Fecha escritura',31)
+        for r in rows[hi+1:]:
+            if not r or r[0] is None: continue
+            if str(r[0]).strip().upper().startswith('TOTAL'): continue
+            if iV>=len(r) or r[iV] is None: continue
+            g=lambda k: r[k] if k<len(r) else None
+            comp=str(g(iCo) or '').strip()
+            pt=r2(g(iPT)) or r2(g(iPB)); iva=r2(g(iIVA)) or r2(pt*1.1)
+            pg=r2(g(iPg)); fr=ym(g(iFr)); fe=ym(g(iFe))
+            base=iva if iva>0 else pt
+            pctp=100*pg/base if base else 0
+            est='Libre'
+            if comp:
+                est='Escriturada' if (fe or pctp>=90) else ('Contratada' if pctp>=15 else 'Reservada')
+            uds.append([str(g(iV)).strip(),fase,r2(g(iSU)),r2(g(iSC)),pt,iva,comp[:38],
+                        pg,r2(g(iPd)),fr,fe,est,r2(g(iMe))])
+    m['uds']=uds
+    MOD[cod]=m
+    wb.close()
+    nv=sum(1 for u in uds if u[11]!='Libre')
+    print(f"  {cod:14s} uds {len(uds):4d} vendidas {nv:4d} caps {len(caps):3d} plan {len(pl):3d} flujo {len(fl):3d} sup {m['sup']['constr']:>10,.0f} m2")
+
+# ---------- obra certificada real por mes (cuentas 606 de cada promocion) ----------
+try:
+    Mv=M
+    C606={'60600001':'LARAD','60600002':'PUERTO','60600003':'NUEVOCAMPUS','60600004':'MARIN',
+     '60600005':'VISTAHERMOSA','60600006':'MIRADOR','60600007':'ISLARUA','60600009':'SUELO_IND',
+     '60600011':'CARBAJOSA','60600012':'DONINOS_RES'}
+    ob=Mv[Mv.cta.isin(C606.keys())].copy()
+    ob['p']=ob.cta.map(C606)
+    g=ob.groupby(['p','mes']).neto.sum()
+    for cod in MOD:
+        serie=[[m, r2(g.get((cod,m),0.0))] for m in MESES]
+        MOD[cod]['obraMes']=serie
+    print('  obra certificada mensual incorporada')
+except Exception as e:
+    print('  aviso: no se pudo calcular la obra mensual:',e)
+    for cod in MOD: MOD[cod]['obraMes']=[]
+DATA['mod'] = MOD
+print('  modelo de promocion incorporado:', len(MOD), 'promociones')
+
 json.dump(DATA, open(os.path.join(OUT,'DATA.json'),'w',encoding='utf-8'), ensure_ascii=False, separators=(',',':'))
 print('DATA.json',os.path.getsize(os.path.join(OUT,'DATA.json'))//1024,'KB')
 print('meses',NM,'| apuntes',len(AP),'| facturas rec',len(FRAC),'| emitidas',len(FEMI))

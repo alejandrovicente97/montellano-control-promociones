@@ -87,6 +87,11 @@ td{padding:8px 11px;text-align:right;border-bottom:1px solid var(--line2);font-v
 tr.tot td{font-weight:600;border-top:1.5px solid var(--navy);background:#fbfcfe;color:var(--navy)}
 tr.sub2 td{background:#f7f9fc;font-weight:600;color:var(--navy);font-size:10.5px;text-transform:uppercase;letter-spacing:.8px}
 tbody tr:hover{background:#f8fafd}
+tr.clk{cursor:pointer}
+tr.clk .lupa{opacity:0;color:var(--navy3);font-weight:600;transition:.12s}
+tr.clk:hover .lupa{opacity:1}
+tr.clk.sel{background:#eef3fb;box-shadow:inset 3px 0 0 var(--navy)}
+tr.clk.sel .lupa{opacity:1}
 .pos{color:var(--ok)}.neg{color:var(--bad)}.wrn{color:var(--warn)}.muted{color:var(--ink3)}
 .chip{display:inline-block;padding:2.5px 8px;border-radius:4px;font-size:10.5px;font-weight:600;background:#eef2f8;color:var(--ink2);letter-spacing:.2px}
 .chip.ok{background:#e6f4ec;color:#12653c}.chip.bad{background:#fbeae9;color:#96201a}

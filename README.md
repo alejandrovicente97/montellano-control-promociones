@@ -16,7 +16,13 @@ En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pes
 
 **Presupuesto vs Real.** Coste real de la contabilidad frente al presupuestado, avance económico, ventas realizadas, desviaciones destacadas, detalle de partidas y capítulos de obra.
 
+**Comercial.** Unidades libres, reservadas, contratadas y escrituradas sobre el total, ritmo de ventas mensual y meses para agotar el stock, precio medio realizado frente al del estudio y €/m², con el detalle unidad a unidad.
+
+**Obra.** Curva S de certificación real frente al cronograma del estudio, desfase en plazo y en coste, avance por promoción y detalle por capítulo de obra.
+
 **Caja.** Cobrado frente a facturado a clientes, pagado frente a facturado a proveedores, posición por cuenta bancaria y cobertura de tesorería, con el detalle de cobros y pagos en dos modos: lo ejecutado, movimiento a movimiento de las cuentas de tesorería agrupado por concepto, y lo pendiente, factura a factura de lo que queda por cobrar y por pagar.
+
+**Proyección.** Tesorería a dieciocho meses con cobros por escrituración, pagos de obra, disposiciones y amortizaciones del préstamo y punto de máxima necesidad de financiación; rendimiento de cada promoción como inversión con TIR, múltiplo sobre fondos propios y ratios por metro cuadrado; y escenarios de sensibilidad de coste de obra, precios de venta y tipo de interés.
 
 **Deuda.** Dispuesto, límite y disponible de los préstamos promotor, financiación prevista pendiente de formalizar y otra financiación del grupo.
 
@@ -31,7 +37,7 @@ En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pes
 ## Fuentes
 
 - Diarios contables 2023, 2024, 2025 y 2026 de las ocho sociedades del grupo (`Diarios/`). Los asientos de apertura y de cierre se excluyen para encadenar los cuatro ejercicios sin duplicar saldos; el cierre de existencias de 2023 coincide al céntimo con la apertura de 2024.
-- Presupuestos operativos por promoción (`Presupuestos/`).
+- Presupuestos operativos por promoción (`Presupuestos/`). Además del estudio económico se explotan las hojas `DATOS GENERALES` (superficies y unidades), `PLANNING MENSUAL` (cronograma de coste y calendario de cobros de compradores), `FLUJO FINANCIERO` (proyección de obra, préstamo, intereses y fondos propios), `CAPITULOS OBRA` y `COMPRADORES` (unidad a unidad).
 - Analítica contable del cliente (`ANALITICA*.xlsx`), opcional.
 - Registro de facturas emitidas y recibidas.
 - Carpeta `Logos/` (opcional): si existe junto a `Diarios/`, cada imagen que contenga se incrusta como logo de su promoción. El nombre del fichero puede ser el código interno (`CARBAJOSA.png`) o el nombre comercial (`Jardines de Carbajosa.svg`); se admiten png, jpg, svg y webp. Sin esa carpeta, cada promoción usa un monograma con su color corporativo.
@@ -46,7 +52,7 @@ python etl.py "<carpeta con Diarios y Presupuestos>" .
 python build.py .
 ```
 
-`etl.py` produce `DATA.json` en cuatro fases: carga y asignación de los diarios, series mensuales por promoción, presupuestos y facturas, y contraste con la analítica contable. `build.py` ensambla `src_layout.html`, `src_app.js`, Chart.js y `DATA.json` en el `index.html` final.
+`etl.py` produce `DATA.json` en cinco fases: carga y asignación de los diarios, series mensuales por promoción, presupuestos y facturas, contraste con la analítica contable, y modelo de promoción con el detalle comercial, de obra y de flujo financiero. `build.py` ensambla `src_layout.html`, `src_app.js`, Chart.js y `DATA.json` en el `index.html` final.
 
 ## Cómo actualizar un mes
 
