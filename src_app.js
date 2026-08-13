@@ -1806,8 +1806,10 @@ function concDetalle(cod,t){
       {v:x.mio!=null?eur(x.mio):'<span class="muted">—</span>'},
       {v:x.ana!=null?eur(x.ana):'<span class="muted">—</span>'},
       {v:eur(x.imp),cls:Math.abs(x.imp)>100000?'neg':(Math.abs(x.imp)>20000?'wrn':'')},
-      {v:rep.length?'<span class="muted small">'+rep.join('<br>')+'</span>':'',cls:'l'}]};});
-  return `<div class="scroll">${tbl([{t:'Fecha'},{t:'Cuenta',l:1},{t:'Concepto',l:1},{t:'Mi reparto'},{t:'Analítica'},{t:'Diferencia'},{t:'Cómo lo reparte',l:1}],filas)}</div>`;
+      {v:rep.length?'<span class="muted small">'+rep.join('<br>')+'</span>':'',cls:'l'},
+      {v:(i!=null&&APU[i])?oSel(i,APU[i][8]):'<span class="muted">—</span>',cls:'l'}]};});
+  return `<div class="scroll">${tbl([{t:'Fecha'},{t:'Cuenta',l:1},{t:'Concepto',l:1},{t:'Mi reparto'},{t:'Analítica'},{t:'Diferencia'},{t:'Cómo lo reparte',l:1},{t:'Cambiar la obra',l:1}],filas)}</div>
+   <div class="legend">Si una factura está imputada a la obra equivocada, cámbiala en el desplegable de la derecha. La decisión queda recogida y se descarga con el botón <i>Descargar reasignaciones</i> de la pestaña de promoción, para incorporarla al ETL como regla permanente. <b>Ojo:</b> esta tabla no se recalcula al momento, porque la columna de la analítica es un fichero cerrado; el efecto se ve al regenerar el cuadro.</div>`;
 }
 function concPanel(cod){
   const f=concFilas(cod), tot=f.reduce((a,x)=>a+x[1].imp,0);
