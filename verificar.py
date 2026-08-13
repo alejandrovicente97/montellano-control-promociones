@@ -281,9 +281,13 @@ if CONCv:
         nc=(x.get('spv') or 0)+(x.get('apert') or 0)+(x.get('julio') or 0)
         chk(f'Conciliacion [{c}]: las partidas suman la diferencia contra la analitica',
             round(sum(y['imp'] for y in it)-nc,2), round(x['dif'],2), 0.05)
-    _t={'reparto','otra_obra','solo_ana','no_ana','residuo','directa'}
+    _t={'reparto','otra_obra','importe','solo_ana','no_ana','residuo','directa'}
     _mal=sorted({y['t'] for it in CONCv.values() for y in it}-_t)
     chk('Conciliacion: no hay partidas de tipo desconocido',len(_mal),0,0,'tipos raros: '+', '.join(_mal))
+    # el reparto entre obras solo mueve coste de una a otra: sumando todas las
+    # promociones tiene que netear exactamente cero
+    _rr=sum(y['imp'] for it in CONCv.values() for y in it if y['t'] in ('reparto','otra_obra'))
+    chk('Conciliacion: el reparto entre obras netea cero en el conjunto',round(_rr,2),0.0,0.05)
 
 # ================= salida =================
 mal=[r for r in R if not r[0]]

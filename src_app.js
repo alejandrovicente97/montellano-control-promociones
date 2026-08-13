@@ -1772,11 +1772,13 @@ function repWire(){
 const CONC=RP.conc||{};
 /* Tres bloques, no seis: la misma factura repartida distinto, facturas que solo tiene
    uno de los dos, y coste que entra en existencias sin pasar por factura. */
-const CGRP={reparto:'reparto',otra_obra:'solo_uno',solo_ana:'solo_uno',no_ana:'solo_uno',
+const CGRP={reparto:'reparto',otra_obra:'reparto',importe:'importe',
+            solo_ana:'solo_uno',no_ana:'solo_uno',
             residuo:'activacion',directa:'activacion'};
 const CTIP={
-  reparto:['La misma factura, repartida de otra manera','Está en los dos sitios pero con importes distintos: la analítica la trocea entre proyectos y fases, o la suma con otro signo.'],
-  solo_uno:['Facturas que solo tiene uno de los dos','Apuntes que yo imputo aquí y la analítica lleva a otro proyecto, apuntes suyos que no encuentro en el diario, y movimientos míos que su fichero no recoge por ser de sociedad vehículo o posteriores a su corte.'],
+  reparto:['La misma factura, repartida entre obras de otra manera','Los dos tenemos la factura por el mismo importe, pero la asignamos a obras distintas: la analítica la trocea entre proyectos y fases. Sumando todas las promociones este bloque netea cero, porque lo que una obra pierde otra lo gana. Es un criterio de reparto a acordar, no un error.'],
+  importe:['La misma factura, con importe distinto','El importe total de la factura no coincide entre la analítica y el diario. Esto no se reparte: es una incidencia a resolver. La causa principal son abonos que la analítica suma en positivo y nóminas contabilizadas por el doble.'],
+  solo_uno:['Facturas que solo tiene uno de los dos','Apuntes de la analítica que no encuentro en el diario, y movimientos míos que su fichero no recoge por ser de sociedad vehículo o posteriores a su fecha de corte.'],
   activacion:['Coste que entra en existencias sin factura','Compras de suelo e inmovilizado que no pasan por una cuenta de gasto, y la parte que el contable activa cada mes por encima del gasto del periodo.'],
 };
 function concFilas(cod){
@@ -1792,9 +1794,10 @@ function concDetalle(cod,t){
     const i=x.i, r=i!=null?APU[i]:null;
     const txt=r?esc(r[3])+(r[4]&&r[4]!==r[3]?'<div class="muted small">'+esc(r[4])+'</div>':''):'<span class="muted">—</span>';
     const rep=[];
-    const SUB={otra_obra:'la analítica lo lleva a otro proyecto',solo_ana:'no aparece en el diario',
+    const SUB={otra_obra:'la analítica lo lleva entero a otro proyecto',solo_ana:'no aparece en el diario',
                no_ana:'la analítica no lo recoge',residuo:'activación sobre el gasto del periodo',
-               directa:'compra directa a existencias'};
+               directa:'compra directa a existencias',
+               importe:'incidencia: el importe no coincide'};
     if(SUB[x.t]) rep.push('<i>'+SUB[x.t]+'</i>');
     if(x.otros&&Object.keys(x.otros).length) rep.push('analítica → '+Object.entries(x.otros).map(([k,v])=>`${esc(PMAP[k]?.nom||k)} ${eur(v)}`).join(' · '));
     if(x.mios&&Object.keys(x.mios).length) rep.push('yo también → '+Object.entries(x.mios).map(([k,v])=>`${esc(PMAP[k]?.nom||k)} ${eur(v)}`).join(' · '));

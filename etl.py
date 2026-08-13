@@ -1172,14 +1172,31 @@ try:
                 mio=r2((_mioK.get(k) or {}).get(p,0.0))
                 ana=r2((_rep.get(k) or {}).get(p,0.0))
                 d=r2(mio-ana)
-                if abs(d)<0.005: continue
                 ii=(_repK.get(k) or [None])[0]
                 otros={a:b for a,b in (_rep.get(k) or {}).items() if a!=p and abs(b)>0.005}
                 mios={a:r2(b) for a,b in (_mioK.get(k) or {}).items() if a!=p and abs(b)>0.005}
-                if k not in _mioK:   t='solo_ana'      # la analitica lo tiene, el diario no
-                elif abs(ana)<0.005: t='otra_obra'     # yo lo imputo aqui, la analitica no
-                else:                t='reparto'       # los dos, con importes distintos
-                it.append(dict(t=t,i=ii,imp=d,mio=r2(mio),ana=r2(ana),otros=otros,mios=mios))
+                if k not in _mioK:
+                    if abs(d)>=0.005:
+                        it.append(dict(t='solo_ana',i=ii,imp=d,mio=r2(mio),ana=r2(ana),otros=otros,mios=mios))
+                    continue
+                # La factura esta en los dos sitios. Se separan dos cosas distintas:
+                #   - que cada uno la reparta entre obras de forma diferente, que por
+                #     construccion neteA cero sumando todas las promociones, y
+                #   - que el importe total de la factura no coincida, que no es un
+                #     criterio de reparto sino una incidencia a resolver.
+                MIO=r2(sum((_mioK.get(k) or {}).values()))
+                ANA=r2(sum((_rep.get(k) or {}).values()))
+                DEL=r2(MIO-ANA)
+                if abs(DEL)<0.005:      cuota=0.0
+                elif abs(ANA)>=0.005:   cuota=r2(DEL*ana/ANA)
+                elif abs(MIO)>=0.005:   cuota=r2(DEL*mio/MIO)
+                else:                   cuota=0.0
+                rep=r2(d-cuota)
+                if abs(cuota)>=0.005:
+                    it.append(dict(t='importe',i=ii,imp=cuota,mio=r2(MIO),ana=r2(ANA),otros=otros,mios=mios))
+                if abs(rep)>=0.005:
+                    t='otra_obra' if abs(ana)<0.005 else 'reparto'
+                    it.append(dict(t=t,i=ii,imp=rep,mio=r2(mio),ana=r2(ana),otros=otros,mios=mios))
             for pp,i,v in _sinK:
                 if pp==p: it.append(dict(t='no_ana',i=i,imp=v))
             if abs(RESID.get(p,0))>0.005: it.append(dict(t='residuo',imp=r2(RESID[p])))
