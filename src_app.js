@@ -1494,7 +1494,7 @@ function cProy(){
 const RP=DATA.rep||{};
 const APU=DATA.apuntes||[];
 /* apunte: 0 soc 1 fecha 2 asiento 3 concepto 4 descripcion 5 cuenta 6 debe 7 haber 8 promo 9 naturaleza 10 ejercicio */
-const RPS={sel:null, ov:{}, ovc:{}, ok:{}, cap:null, vista:'cuadre', q:'', tope:120};
+const RPS={sel:null, ov:{}, ovc:{}, ok:{}, cap:null, csel:null, vista:'cuadre', q:'', tope:120};
 const RESN=RP.residNom||'Suelo y regularizaciones aportados directamente a existencias';
 const CAPS=(RP.caps||[]).concat([RESN]);
 const capDe=(i,base)=>(RPS.ovc[i]!==undefined?RPS.ovc[i]:base);
@@ -1754,6 +1754,9 @@ function repWire(){
     if(ev.target.closest('select,a,button')) return;
     const p=tr.dataset.p; RPS.sel=(RPS.sel===p?null:p); RPS.vista='cuadre'; RPS.cap=null; RPS.q=''; RPS.tope=120; render();});
   document.querySelectorAll('#main .rtab').forEach(t=>t.onclick=()=>{RPS.vista=t.dataset.v; RPS.tope=120; RPS.cap=null; render();});
+  document.querySelectorAll('#main tr.clka').forEach(tr=>tr.onclick=ev=>{
+    if(ev.target.closest('select,a,button')) return;
+    const a=tr.dataset.a; RPS.csel=(RPS.csel===a?null:a); RPS.cap=null; RPS.tope=120; render();});
   document.querySelectorAll('#main tr.clkc').forEach(tr=>tr.onclick=ev=>{
     if(ev.target.closest('select,a,button')) return;
     const k=tr.dataset.c; RPS.cap=(RPS.cap===k?null:k); RPS.tope=120; render();});
@@ -1777,6 +1780,72 @@ function repWire(){
   const e=document.getElementById('rpExp'); if(e) e.onclick=repExporta;
   const c=document.getElementById('rpCsv'); if(c) c.onclick=repExportaCsv;
   const d=document.getElementById('rpDes'); if(d) d.onclick=()=>{RPS.ov={}; render();};
+}
+
+/* =============================================================================
+   CONCILIACION CONTRA LA ANALITICA DE CONTABILIDAD
+   Descompone la diferencia entre lo que este cuadro imputa a cada promocion y lo
+   que le imputa la analitica. Las partidas suman la diferencia exacta: no hay
+   nada que dar por bueno a mano, cada linea es una factura con nombre y fecha.
+   ============================================================================= */
+const CONC=RP.conc||{};
+const CTIP={
+  reparto:['La analítica reparte la factura de otra manera','El apunte está en los dos sitios pero con importe distinto: la analítica lo trocea entre proyectos y fases, o lo suma con otro signo.'],
+  otra_obra:['Facturas que imputo aquí y la analítica no','Yo cargo el apunte a esta promoción; la analítica se lo lleva entero a otro proyecto.'],
+  solo_ana:['Apuntes de la analítica que no encuentro en el diario','La analítica los imputa a esta promoción pero no hay un apunte del diario con esa fecha, cuenta y concepto.'],
+  no_ana:['Apuntes míos que la analítica no recoge','Sociedades vehículo, que no entran en ese fichero, y movimientos posteriores a su fecha de corte.'],
+  residuo:['Activación que no pasa por factura',''],
+  directa:['Compra de suelo e inmovilizado directa','Entra en existencias o en inmovilizado sin pasar por una cuenta de gasto.'],
+};
+function concFilas(cod){
+  const it=CONC[cod]||[], g={};
+  it.forEach(x=>{(g[x.t]=g[x.t]||{n:0,imp:0,it:[]}); g[x.t].n++; g[x.t].imp+=x.imp; g[x.t].it.push(x);});
+  return Object.entries(g).sort((a,b)=>Math.abs(b[1].imp)-Math.abs(a[1].imp));
+}
+function concDetalle(cod,t){
+  const it=(concFilas(cod).find(x=>x[0]===t)||[null,{it:[]}])[1].it.slice()
+    .sort((a,b)=>Math.abs(b.imp)-Math.abs(a.imp)).slice(0,RPS.tope);
+  const filas=it.map(x=>{
+    const i=x.i, r=i!=null?APU[i]:null;
+    const txt=r?esc(r[3])+(r[4]&&r[4]!==r[3]?'<div class="muted small">'+esc(r[4])+'</div>':''):'<span class="muted">—</span>';
+    const rep=[];
+    if(x.otros&&Object.keys(x.otros).length) rep.push('analítica → '+Object.entries(x.otros).map(([k,v])=>`${esc(PMAP[k]?.nom||k)} ${eur(v)}`).join(' · '));
+    if(x.mios&&Object.keys(x.mios).length) rep.push('yo también → '+Object.entries(x.mios).map(([k,v])=>`${esc(PMAP[k]?.nom||k)} ${eur(v)}`).join(' · '));
+    return {c:[{v:r?r[1]:'—'},{v:r?'<span class="pill">'+esc(r[5])+'</span>':''},
+      {v:(r&&apPdf(i))?pdfLink(apPdf(i),txt):txt,cls:'l'},
+      {v:x.mio!=null?eur(x.mio):'<span class="muted">—</span>'},
+      {v:x.ana!=null?eur(x.ana):'<span class="muted">—</span>'},
+      {v:eur(x.imp),cls:Math.abs(x.imp)>100000?'neg':(Math.abs(x.imp)>20000?'wrn':'')},
+      {v:rep.length?'<span class="muted small">'+rep.join('<br>')+'</span>':'',cls:'l'}]};});
+  return `<div class="scroll">${tbl([{t:'Fecha'},{t:'Cuenta',l:1},{t:'Concepto',l:1},{t:'Mi reparto'},{t:'Analítica'},{t:'Diferencia'},{t:'Cómo lo reparte',l:1}],filas)}</div>`;
+}
+function concPanel(cod){
+  const f=concFilas(cod), tot=f.reduce((a,x)=>a+x[1].imp,0);
+  const filas=[];
+  f.forEach(([t,v])=>{
+    const ab=RPS.cap==='C:'+t;
+    filas.push({cls:'clk clkc'+(ab?' sel':''),attr:`data-c="C:${t}"`,c:[
+      {v:`<b>${esc((CTIP[t]||[t])[0])}</b> <span class="muted small">${nf0.format(v.n)} partidas</span> <span class="lupa">${ab?'▾':'▸'}</span>`},
+      {v:eur(v.imp),cls:Math.abs(v.imp)>100000?'neg':(Math.abs(v.imp)>20000?'wrn':'')}]});
+    if(ab) filas.push({raw:`<td class="expand2 l" colspan="2"><div class="expwrap2">
+      ${(CTIP[t]||['',''])[1]?`<div class="legend" style="margin:0 0 9px">${(CTIP[t]||['',''])[1]}</div>`:''}
+      ${concDetalle(cod,t)}</div></td>`});
+  });
+  filas.push({cls:'tot',c:[{v:'<b>Diferencia total entre mi reparto y la analítica</b>'},{v:eur(tot)}]});
+  const cm=(DATA.ana?.cmp||[]).find(x=>x.cod===cod)||{};
+  const nc=(cm.spv||0)+(cm.apert||0)+(cm.julio||0);
+  if(Math.abs(nc)>0.5){
+    filas.push({c:[{v:'De la cual no es comparable con la analítica<div class="muted small">'+
+      [cm.spv?'sociedad vehículo '+eur(cm.spv):'',cm.apert?'asiento de apertura '+eur(cm.apert):'',
+       cm.julio?'movimientos de julio, posteriores a su corte '+eur(cm.julio):''].filter(Boolean).join(' · ')+'</div>',cls:'l'},
+      {v:eur(nc),cls:'muted'}]});
+    filas.push({cls:'tot',c:[{v:'<b>Diferencia comparable</b> <span class="muted small">la que muestra la tabla</span>'},{v:eur(tot-nc)}]});
+  }
+  return `<div class="expwrap">
+    <div style="font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:11px">De qué se compone la diferencia de ${esc(PMAP[cod]?.nom||cod)}</div>
+    ${tbl([{t:'Concepto',l:1},{t:'Importe'}],filas)}
+    <div class="legend">Estas partidas suman <b>exactamente</b> la diferencia entre mi reparto y la analítica: no queda residuo ni hay nada que dar por bueno a mano. Pincha cualquier línea para ver las facturas concretas y cómo las reparte cada uno.</div>
+  </div>`;
 }
 /* ============================== CALIDAD DE DATOS ============================== */
 function vCal(){
@@ -1843,15 +1912,18 @@ function vCal(){
     if(x.cod==='SIN_ASIGNAR') p.push('la analítica reparte estructura que aquí no se imputa a obra');
     if(x.cod==='OFICINAS') p.push('la analítica trata oficinas como proyecto');
     return p.length?'<span class="chip info">'+esc(p.join(' · '))+'</span>':'<span class="chip warn">Pendiente de explicar</span>';};
-  const acr=AC.filter(x=>x.base>0.5||Math.abs(x.ana)>0.5).map(x=>({
-    cls:Math.abs(x.dif)>100000?'':'',c:[
-      {v:'<b>'+esc(PMAP[x.cod]?.nom||x.cod)+'</b>'},
+  const acr=[];
+  AC.filter(x=>x.base>0.5||Math.abs(x.ana)>0.5).forEach(x=>{
+   const ab=RPS.csel===x.cod, hay=(DATA.rep?.conc||{})[x.cod];
+   acr.push({cls:hay?('clk clka'+(ab?' sel':'')):'',attr:hay?`data-a="${x.cod}"`:'',c:[
+      {v:'<b>'+esc(PMAP[x.cod]?.nom||x.cod)+'</b>'+(hay?` <span class="lupa">${ab?'▾ ocultar desglose':'▸ desglosar la diferencia'}</span>`:'')},
       {v:eur(x.mio_total)},
       {v:x.spv||x.apert?eur(-(x.spv+x.apert)):'<span class="muted">—</span>',cls:'muted'},
       {v:eur(x.base)},{v:eur(x.ana)},
       {v:eur(x.dif),cls:Math.abs(x.dif)<0.5?'pos':(Math.abs(x.dif)>100000?'neg':'wrn')},
       {v:x.ana?pct1(100*x.dif/x.ana):'—'},
-      {v:expl(x),cls:'l'}]}));
+      {v:expl(x),cls:'l'}]});
+   if(ab) acr.push({raw:`<td class="expand l" colspan="8">${concPanel(x.cod)}</td>`});});
   {const t=AC.reduce((a,x)=>({m:a.m+x.mio_total,s:a.s+x.spv+x.apert,b:a.b+x.base,a:a.a+x.ana,d:a.d+x.dif}),{m:0,s:0,b:0,a:0,d:0});
    acr.push({cls:'tot',c:[{v:'<b>Total</b>'},{v:eur(t.m)},{v:eur(-t.s)},{v:eur(t.b)},{v:eur(t.a)},{v:eur(t.d)},
      {v:t.a?pct1(100*t.d/t.a):'—'},{v:''}]});}
@@ -1889,7 +1961,8 @@ function vCal(){
      ${tAna}
      <div class="legend">Columna <i>Mi reparto</i>: coste que este cuadro imputa a cada promoción, leyendo los diarios y aplicando los criterios de la tabla de arriba. Columna <i>Analítica</i>: lo que el fichero de analítica de contabilidad asigna a ese mismo proyecto.
      Para comparar lo mismo se descuenta de mi reparto lo que la analítica no recoge —las sociedades vehículo, que no entran en el fichero, y el asiento de apertura— y se compara contra la analítica a su fecha de corte.
-     <b>En seis de las ocho promociones con estudio, la cifra de la analítica y la columna <i>Ejecutado</i> del estudio económico son idénticas al céntimo</b>, así que esta tabla y el cuadre por capítulos miran la misma diferencia desde dos ángulos.</div></div></div>
+     <b>Pincha en cualquier promoción y la diferencia se descompone en partidas concretas que suman esa cifra exacta</b>, cada una con sus facturas y con el reparto que hace cada uno. No hay residuo ni nada que dar por bueno a mano.
+     En seis de las ocho promociones con estudio la cifra de la analítica y la columna <i>Ejecutado</i> del estudio económico son idénticas al céntimo, y sus capítulos son las secciones de la analítica agrupadas, de modo que este desglose explica también la diferencia contra el estudio.</div></div></div>
    <div class="card"><h3>Conciliación entre gasto contabilizado y coste imputado a promociones</h3><div class="cbody scroll">${tConc}
      <div class="legend">El coste imputado incluye compras de suelo e inmovilizado de promoción, que no son gasto del ejercicio: por eso puede superar al gasto contabilizado.</div></div></div>
    <div class="grid1">

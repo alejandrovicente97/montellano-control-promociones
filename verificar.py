@@ -269,6 +269,22 @@ if RPv:
         g=sum(_neto(i) for i in (RPv.get('gas') or {}).get(c,[]))
         chk(f'Cuadre [{c}]: residuo de activacion sobre gasto',round(v,2),round(a-dr-g,2))
 
+# ================= conciliacion contra la analitica =================
+# Cada promocion tiene una lista de partidas que descomponen la diferencia entre el
+# reparto de este cuadro y el de la analitica. Deben sumar esa diferencia exacta.
+CONCv=(D.get('rep') or {}).get('conc') or {}
+if CONCv:
+    _cmp={x['cod']:x for x in (D.get('ana') or {}).get('cmp',[])}
+    for c,it in CONCv.items():
+        x=_cmp.get(c)
+        if not x: continue
+        nc=(x.get('spv') or 0)+(x.get('apert') or 0)+(x.get('julio') or 0)
+        chk(f'Conciliacion [{c}]: las partidas suman la diferencia contra la analitica',
+            round(sum(y['imp'] for y in it)-nc,2), round(x['dif'],2), 0.05)
+    _t={'reparto','otra_obra','solo_ana','no_ana','residuo','directa'}
+    _mal=sorted({y['t'] for it in CONCv.values() for y in it}-_t)
+    chk('Conciliacion: no hay partidas de tipo desconocido',len(_mal),0,0,'tipos raros: '+', '.join(_mal))
+
 # ================= salida =================
 mal=[r for r in R if not r[0]]
 print('='*104)
@@ -282,3 +298,4 @@ for ok,nom,a,b,nota in R:
 if not mal:
     print('  Todas las magnitudes publicadas coinciden con el recalculo independiente desde los diarios.')
 print('='*104)
+

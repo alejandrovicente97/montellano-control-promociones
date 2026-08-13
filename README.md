@@ -82,7 +82,7 @@ Los enlaces son rutas relativas, así que funcionan al abrir el dashboard desde 
 
 ## Verificación
 
-`verificar.py` vuelve a leer los diarios contables desde Excel, aplica el mismo criterio de exclusión de asientos técnicos y contrasta 252 magnitudes contra `DATA.json`: apuntes, partida doble, coste incurrido, obra en curso, ingresos, coste de las unidades entregadas, caja, deuda, saldos de clientes y proveedores cuenta a cuenta, tesorería, presupuesto, cuadro comercial, capítulos de obra, cronograma, analítica, reparto de coste y cuadre por capítulo. Incluye además comprobaciones de coherencia interna: la misma magnitud no puede salir distinta en dos pestañas.
+`verificar.py` vuelve a leer los diarios contables desde Excel, aplica el mismo criterio de exclusión de asientos técnicos y contrasta 267 magnitudes contra `DATA.json`: apuntes, partida doble, coste incurrido, obra en curso, ingresos, coste de las unidades entregadas, caja, deuda, saldos de clientes y proveedores cuenta a cuenta, tesorería, presupuesto, cuadro comercial, capítulos de obra, cronograma, analítica, reparto de coste, cuadre por capítulo y conciliación contra la analítica. Incluye además comprobaciones de coherencia interna: la misma magnitud no puede salir distinta en dos pestañas.
 
 ```
 python verificar.py

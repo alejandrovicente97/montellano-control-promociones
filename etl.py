@@ -1044,45 +1044,82 @@ try:
         print('  aviso: no se pudo identificar el proveedor de los apuntes:',e)
 
     # ---- clasificacion por capitulo del estudio economico ----------------------------
-    # El estudio reparte el coste ejecutado en capitulos. La contabilidad lo reparte por
-    # cuenta. Para poder cuadrar una columna contra otra se clasifica cada apunte en el
-    # capitulo equivalente: por cuenta cuando la cuenta ya lo identifica, y por proveedor
-    # cuando cae en una cuenta 606 de obra, que en esta contabilidad recoge tambien suelo,
-    # honorarios y comercializacion. La clasificacion es un punto de partida revisable
-    # desde el propio cuadro; no altera ninguna cifra, solo agrupa.
+    # La columna "Ejecutado" del estudio no es una cifra suelta: es la analitica de
+    # contabilidad agrupada por SECCION. Esta comprobado apunte a apunte -- con el mapa
+    # de secciones de abajo, la analitica reproduce al centimo los capitulos del estudio
+    # en las seis promociones de la matriz (Puerto, Nuevo Campus, Doninos Residencial,
+    # El Marin, Vistahermosa y Mirador). Asi que el capitulo de cada factura no se
+    # adivina: se toma de la propia analitica cuando la factura aparece en ella, y solo
+    # se decide por cuenta cuando no aparece.
     CAPS=['Suelo','Obra','Tasas e impuestos','Honorarios técnicos','Acometidas','Comercial',
           'Jurídicos','Seguros y avales','Financieros','Imprevistos y costes extra',
           'Estructura','Otros']
-    KWCAP=[('Suelo',r'LANDCOMPANY|SOLAR|TERRENO|PARCELA|COMPRAVENTA|FINCA'),
-           ('Honorarios técnicos',r'ARQUITECT|INGENIER|APAREJAD|TOPOGRAF|GEOTECN|OCT\b|CONTROL TECNICO|EUROVALORACIONES|METRO DISE|ESTUDIO TECNICO|PROYECTO'),
-           ('Comercial',r'ADEVINTA|IDEALISTA|FOTOCASA|PUBLICID|MARKETING|PERSUADIS|INMOBILIARI|ROTUL'),
-           ('Jurídicos',r'NOTARI|REGISTRO DE LA PROPIEDAD|ABOGAD|GESTORIA|PROCURAD|ASESOR'),
-           ('Seguros y avales',r'SEGURO|MAPFRE|ASEGURAD|AVAL'),
-           ('Acometidas',r'IBERDROLA|ENDESA|AQUALIA|ACOMETIDA|NATURGY|UNION FENOSA|AGUAS DE')]
+    SEC2CAP={'CONSTRUCCIONES':'Obra','MEJORAS':'Obra','PISCINAS':'Obra','COCINAS':'Obra',
+      'PERSONAL':'Obra','SUELO / TERRENO':'Suelo','GASTOS INICIALES':'Suelo',
+      'FINANCIEROS':'Financieros','ARQUITECTO Y APARAREJADOR':'Honorarios técnicos',
+      'TECNICOS':'Honorarios técnicos','OCT Y CC':'Honorarios técnicos',
+      'LICENCIAS Y TASAS':'Tasas e impuestos','COMERCIALIZACION':'Comercial',
+      'ACOMETIDAS':'Acometidas','GASTOS JURIDICOS':'Jurídicos',
+      'GASTOS INDIRECTOS A LA OBRA (OTROS GASTOS)':'Jurídicos',
+      'GASTOS GENERALES (MONTELLANO)':'Jurídicos'}
+    # Mapa por cuenta, revisado cuenta a cuenta sobre el plan real de la sociedad.
+    # Solo se usa para lo que la analitica no recoge.
     def _capCta(c):
-        if c.startswith(('313','21000','23100')): return 'Suelo'
-        if c.startswith('606'): return None                 # decide el proveedor
-        if c.startswith(('630','631')): return 'Tasas e impuestos'
+        if c.startswith(('313','21000','23100')) or c.startswith('601'): return 'Suelo'
+        if c.startswith('606') or c.startswith('602'): return 'Obra'
+        if c.startswith('631'): return 'Tasas e impuestos'
+        if c.startswith(('630','6301')): return 'Otros'      # impuesto de sociedades y diferido
         if c.startswith('623'): return 'Honorarios técnicos'
-        if c.startswith('628'): return 'Acometidas'
         if c.startswith('627'): return 'Comercial'
         if c.startswith('625'): return 'Seguros y avales'
-        if c.startswith('6623'): return 'Seguros y avales'
-        if c.startswith(('660','661','662','665','668','669')): return 'Financieros'
-        if c.startswith(('620','621','622','624','626','629','640','641','642','643','649')): return 'Estructura'
+        if c.startswith('66230100') or c.startswith('66230101') or c.startswith('66230102'):
+            return 'Seguros y avales'                        # estos si son avales
+        if c.startswith(('660','661','662','665','668','669','626')): return 'Financieros'
+        if c.startswith('62800003') or c.startswith('62800005'): return 'Obra'  # gasoleo y combustible de obra
+        if c.startswith('628'): return 'Acometidas'
+        if c.startswith('611'): return 'Suelo'               # variacion de existencias de terrenos
+        if c.startswith(('620','621','622','624','629','640','641','642','643','649')): return 'Estructura'
         return 'Otros'
-    def _capProv(nom):
-        for cap,rx in KWCAP:
-            if _re.search(rx,nom or '',_re.I): return cap
-        return 'Obra'
-    CAPAP={}
+    # ---- cruce de la analitica con el diario, factura a factura ----------------------
+    # La analitica reparte un mismo apunte del diario entre varios proyectos y fases, asi
+    # que el cruce se hace agrupando por fecha, cuenta y comentario: la suma del grupo en
+    # la analitica tiene que coincidir con el apunte del diario.
+    ANACAP={}; ANAREP={}; ANAKEY={}
+    ANA_OK=ANA_SOLO=0
+    try:
+        _A=A.copy()
+        _A['cap']=_A.seccion.map(SEC2CAP).fillna('Otros')
+        def _nk(s):
+            return (s.fillna('').astype(str).str.upper()
+                    .str.replace(r'\s+',' ',regex=True).str.strip().str[:28])
+        _A['k']=_A.fecha.dt.strftime('%Y%m%d')+'|'+_A.cta.astype(str)+'|'+_nk(_A.comentario)
+        _Mp=_M[_M.soc=='PUM'].copy()
+        _Mp['k']=_Mp.fecha.dt.strftime('%Y%m%d')+'|'+_Mp.cta.astype(str)+'|'+_nk(_Mp.comentario)
+        _gk=_A.groupby('k')
+        _capk=_gk.apply(lambda g: g.groupby('cap').importe.sum().idxmax())
+        _impk=_gk.importe.sum()
+        _repk=_gk.apply(lambda g: {k:r2(v) for k,v in g.groupby('cod').importe.sum().items()})
+        _seen=set()
+        for i,r in zip(_Mp.index,_Mp.itertuples()):
+            k=_Mp.at[i,'k']
+            if k in _capk.index and r.cta[:2] in G6:
+                ANACAP[i]=_capk[k]; ANAKEY[i]=k
+                if k not in _seen:
+                    ANAREP[i]=_repk[k]; _seen.add(k)
+                ANA_OK+=1
+        ANA_SOLO=int(len(_impk.index.difference(set(_Mp.k))))
+        print(f'  analitica cruzada con el diario: {ANA_OK} apuntes casados, {ANA_SOLO} grupos solo en la analitica')
+    except Exception as e:
+        print('  aviso: no se pudo cruzar la analitica con el diario:',e)
+
+    CAPAP={}; CAPORI={}
     for i,r in enumerate(_M.itertuples()):
         c=r.cta
         if c.startswith(('313','21000','23100')) and r.debe and r.debe>0 and _pAct(r) is not None:
-            CAPAP[i]='Suelo'
+            CAPAP[i]='Suelo'; CAPORI[i]='cuenta'
         elif c[:2] in G6:
-            cp=_capCta(c)
-            CAPAP[i]=cp if cp else _capProv(PROVAP.get(i,''))
+            if i in ANACAP: CAPAP[i]=ANACAP[i]; CAPORI[i]='analitica'
+            else: CAPAP[i]=_capCta(c); CAPORI[i]='cuenta'
 
     # ---- residuo: coste incorporado a existencias sin factura ni compra asociada ------
     # La activacion mensual la fija el contable contra la cuenta 71x, y no tiene por que
@@ -1096,6 +1133,71 @@ try:
         g=sum(float(_M.at[i,'neto']) for i in GAST.get(p,[]))
         v=r2(a-dr-g)
         if abs(v)>0.005: RESID[p]=v
+
+    # ---- conciliacion objetiva contra la analitica, factura a factura ----------------
+    # La diferencia entre el coste que este cuadro imputa a una promocion y el que le
+    # imputa la analitica -- que es la columna Ejecutado del estudio -- se descompone en
+    # partidas concretas que suman la diferencia exacta. No hay nada que dar por bueno a
+    # mano: cada partida es una factura con nombre, fecha e importe.
+    CONC={}
+    try:
+        _ANAT=A.groupby('cod').importe.sum().to_dict()
+        # reparto de la analitica para TODOS sus grupos, tambien los que no aparecen en
+        # el diario: si no se incluyen, la conciliacion no cierra
+        _rep={k:{a:r2(b) for a,b in g.groupby('cod').importe.sum().items() if abs(b)>0.005}
+              for k,g in _A.groupby('k')}
+        _mia={}                                   # clave de grupo -> promocion que yo asigno
+        for p,idx in GAST.items():
+            for i in idx:
+                k=ANAKEY.get(i)
+                if k: _mia.setdefault(k,set()).add(p)
+        # Se trabaja por grupo de factura: mi lado es la suma de los apuntes del diario de
+        # ese grupo repartida segun la obra que yo asigno; el lado de la analitica es su
+        # propio reparto por proyecto. La resta de ambos, grupo a grupo, suma exactamente
+        # la diferencia entre las dos columnas.
+        _mioK={}; _repK={}; _sinK=[]
+        for p,idx in GAST.items():
+            for i in idx:
+                k=ANAKEY.get(i); v=float(_M.at[i,'neto'])
+                if k is None:
+                    if abs(v)>0.005: _sinK.append((p,int(i),r2(v)))
+                else:
+                    _mioK.setdefault(k,{}).setdefault(p,0.0)
+                    _mioK[k][p]+=v
+                    _repK.setdefault(k,[]).append(int(i))
+        _todas=set(_mioK)|set(_rep)
+        for p in PORD:
+            it=[]
+            for k in _todas:
+                mio=r2((_mioK.get(k) or {}).get(p,0.0))
+                ana=r2((_rep.get(k) or {}).get(p,0.0))
+                d=r2(mio-ana)
+                if abs(d)<0.005: continue
+                ii=(_repK.get(k) or [None])[0]
+                otros={a:b for a,b in (_rep.get(k) or {}).items() if a!=p and abs(b)>0.005}
+                mios={a:r2(b) for a,b in (_mioK.get(k) or {}).items() if a!=p and abs(b)>0.005}
+                if k not in _mioK:   t='solo_ana'      # la analitica lo tiene, el diario no
+                elif abs(ana)<0.005: t='otra_obra'     # yo lo imputo aqui, la analitica no
+                else:                t='reparto'       # los dos, con importes distintos
+                it.append(dict(t=t,i=ii,imp=d,mio=r2(mio),ana=r2(ana),otros=otros,mios=mios))
+            for pp,i,v in _sinK:
+                if pp==p: it.append(dict(t='no_ana',i=i,imp=v))
+            if abs(RESID.get(p,0))>0.005: it.append(dict(t='residuo',imp=r2(RESID[p])))
+            dr=r2(sum(float(_M.at[i,'debe'] or 0) for i in ACTI.get(p,[])
+                      if not _M.at[i,'cta'].startswith('33')))
+            if abs(dr)>0.005: it.append(dict(t='directa',imp=dr))
+            if it: CONC[p]=sorted(it,key=lambda x:-abs(x['imp']))
+        # control: la suma de partidas tiene que dar la diferencia publicada
+        for p in (PRES or {}):
+            s=r2(sum(x['imp'] for x in CONC.get(p,[])))
+            real=r2(sum(float(_M.at[i,'debe'] or 0) for i in ACTI.get(p,[])))
+            dif=r2(real-_ANAT.get(p,0.0))
+            if abs(s-dif)>0.05:
+                print(f'  aviso: la conciliacion de {p} suma {s:,.2f} y la diferencia es {dif:,.2f}')
+        print('  conciliacion contra la analitica:',sum(len(v) for v in CONC.values()),'partidas')
+    except Exception as e:
+        print('  aviso: no se pudo construir la conciliacion contra la analitica:',e)
+        CONC={}
 
     EST={}
     for p,v in PRES.items():
@@ -1111,7 +1213,8 @@ try:
       ultAct=ULTACT,
       pend={p:v for p,v in PENDI.items() if v},
       pendImp={p:v for p,v in PENDIMP.items() if abs(v)>0.005},
-      pdf=PDFAP, prov=PROVAP, cap=CAPAP, caps=CAPS, resid=RESID, est=EST,
+      pdf=PDFAP, prov=PROVAP, cap=CAPAP, capOri=CAPORI, caps=CAPS, resid=RESID, est=EST,
+      anaRep=ANAREP, anaKey=ANAKEY, conc=CONC, anaTot={k:r2(v) for k,v in (A.groupby("cod").importe.sum().to_dict().items() if "A" in dir() else [])},
       residNom='Suelo y regularizaciones aportados directamente a existencias',
       map33=MAP33, spv2p=SPV2P,
       ejec={p:(PRES.get(p,{}) or {}).get('ejec') for p in PORD if (PRES.get(p,{}) or {}).get('ejec')},
