@@ -420,18 +420,13 @@ function vPres(){
   let t4='';
   if(cod && DATA.pres[cod]?.partidas?.length){
     const by={};DATA.pres[cod].partidas.forEach(x=>{(by[x.cap]=by[x.cap]||[]).push(x);});
-    t4='<div class="card"><h3>Detalle de partidas del estudio económico</h3>'+Object.entries(by).map(([cap,arr])=>{
-      const sp=arr.reduce((a,x)=>a+x.pres,0),se=arr.reduce((a,x)=>a+x.ejec,0);
-      return `<details><summary><span>${esc(cap)} <span class="muted small">· ${arr.length} partidas</span></span>
-        <span class="small">Ppto. <b>${eur(sp)}</b> · Ejec. <b>${eur(se)}</b> · <span class="${se>sp?'neg':'pos'}">${eur(se-sp)}</span></span></summary>
-        <div class="dbody">${tbl([{t:'Partida',l:1},{t:'Presupuestado'},{t:'Ejecutado'},{t:'Desviación'}],
-          arr.map(x=>({c:[{v:esc(x.part)},{v:eur(x.pres)},{v:eur(x.ejec)},{v:eur(x.ejec-x.pres),cls:x.ejec>x.pres?'neg':'pos'}]})))}</div></details>`;}).join('')+'</div>';
+    t4='';
   }
   return k+sem+`<div class="card"><h3>Presupuesto, real contable y ejecutado del estudio</h3><div class="cbody">${t0}
     <div class="legend">«Real (contabilidad)» es el coste incurrido acumulado que sale de los diarios 2023-2026. «Ejecutado (estudio)» es la columna que mantiene el estudio económico. Las diferencias entre ambos se detallan en la pestaña de calidad de datos.</div></div></div>
   <div class="grid3">
     <div class="card"><h3>Presupuesto frente a ejecutado por capítulo</h3><div class="cbody">${tbl([{t:'Capítulo',l:1},{t:'Presupuestado'},{t:'Ejecutado'},{t:'Desviación'},{t:'% desv.'},{t:'Avance'}],rows)}</div></div>
-    <div class="card"><h3>Distribución del presupuesto</h3><div class="cbody"><div class="chartbox"><canvas id="r2"></canvas></div></div></div>
+    
   </div>
   <div class="card"><h3>Desviaciones destacadas</h3><div class="cbody">${desv.length?t2:'<div class="muted">Sin desviaciones relevantes.</div>'}</div></div>
   <div class="card"><h3>Coste incurrido acumulado frente al presupuesto</h3><div class="cbody"><div class="chartbox"><canvas id="r1"></canvas></div></div></div>
@@ -638,11 +633,7 @@ function vDeuda(){
       {v:x.formalizado?'<span class="chip ok">Línea cancelada a cierre</span>':'<span class="chip">Sin disposiciones en el diario</span>'}]})))}
     <div class="legend">No se suman al disponible porque no corresponden a líneas vivas. Sirven para dimensionar la necesidad futura de financiación.</div></div></div>`;
   let otras='';
-  if(SEL===CONS&&DATA.otras.length) otras=`<div class="card"><h3>Otra financiación del grupo <span class="note">deudas con empresas del grupo, socios y arrendamiento financiero</span></h3><div class="cbody">
-    ${tbl([{t:'Concepto',l:1},{t:'Saldo inicial'},{t:'Saldo a cierre'},{t:'Variación'}],DATA.otras.filter(x=>Math.abs(x.serie[b])>1||Math.abs(a===0?0:x.serie[a-1])>1).sort((x,y)=>y.serie[b]-x.serie[b]).map(x=>({c:[
-      {v:esc(x.nom)+'<div class="muted small">cuenta '+x.cta+'</div>'},{v:eur(a===0?0:x.serie[a-1])},{v:eur(x.serie[b])},
-      {v:eur(x.serie[b]-(a===0?0:x.serie[a-1])),cls:x.serie[b]>(a===0?0:x.serie[a-1])?'neg':'pos'}]})))}
-    <div class="legend">Estas deudas no llevan límite de disposición formalizado, por lo que no procede calcular disponible.</div></div></div>`;
+  if(SEL===CONS&&DATA.otras.length) otras=``;
   return k+bar+`
   <div class="card"><h3>Detalle de préstamos promotor</h3><div class="cbody scroll">${d.lineas.length?tbl([{t:'Préstamo',l:1},{t:'Promoción',l:1},{t:'Saldo inicial'},{t:'Disposiciones'},{t:'Amortizaciones'},{t:'Saldo a cierre'},{t:'Estado',l:1}],rows):'<div class="muted">Sin préstamo promotor en el periodo.</div>'}</div></div>
   ${d.lineas.length?`<div class="card"><h3>Saldo vivo y movimientos por mes</h3><div class="cbody"><div class="chartbox"><canvas id="d1"></canvas></div></div></div>`:''}
@@ -986,7 +977,6 @@ function vTer(){
     <div class="legend">Un pagaré o confirming emitido figura como pagado desde su emisión, no desde el vencimiento: lo pendiente es deuda comercial viva, no calendario de salidas de caja.</div></div></div>
   </div>
   <div class="grid3">
-   <div class="card"><h3>Mayores saldos pendientes <span class="note">${esCli?'de cobro':'de pago'}</span></h3><div class="cbody"><div class="chartbox"><canvas id="t1"></canvas></div></div></div>
    <div class="card"><h3>Reparto por promoción</h3><div class="cbody"><div class="chartbox"><canvas id="t2"></canvas></div></div></div>
   </div>
   <div class="card"><h3>Detalle por tercero <span class="note">${periodo()}</span></h3><div class="cbody">
@@ -1015,15 +1005,6 @@ function cTer(){
   const t=terceros(SEL), esCli=FT.v==='cli';
   const src=(esCli?t.cli:t.pro).filter(x=>esCli?x.saldo>0.05:x.saldo<-0.05)
     .map(x=>({n:x.nom,v:esCli?x.saldo:-x.saldo,p:x.promo})).sort((a,b)=>b.v-a.v).slice(0,12);
-  chart('t1',{type:'bar',data:{labels:src.map(x=>x.n.length>34?x.n.slice(0,33)+'…':x.n),
-    datasets:[{label:esCli?'Pendiente de cobro':'Pendiente de pago',data:src.map(x=>x.v),
-      backgroundColor:src.map(x=>acc(x.p)),borderRadius:3}]},
-    options:{...gopt,indexAxis:'y',plugins:{...gopt.plugins,legend:{display:false},
-     tooltip:{callbacks:{title:it=>src[it[0].dataIndex].n,
-      label:c=>' '+(esCli?'Nos deben: ':'Debemos: ')+eur(c.parsed.x),
-      afterLabel:c=>' '+(PMAP[src[c.dataIndex].p]?.nom||'')}}},
-     scales:{x:{grid:{color:'#eef1f6'},ticks:{font:{size:10},callback:v=>kEur(v)}},
-      y:{grid:{display:false},ticks:{font:{size:10.5},autoSkip:false}}}}});
   const byP={};(esCli?t.cli:t.pro).forEach(x=>{const v=esCli?x.saldo:-x.saldo;if(v>0.05)byP[x.promo]=(byP[x.promo]||0)+v;});
   const ks=Object.keys(byP).sort((a,b)=>byP[b]-byP[a]);
   chart('t2',{type:'doughnut',data:{labels:ks.map(c=>PMAP[c]?.nom||c),
@@ -1789,17 +1770,19 @@ function repWire(){
    nada que dar por bueno a mano, cada linea es una factura con nombre y fecha.
    ============================================================================= */
 const CONC=RP.conc||{};
+/* Tres bloques, no seis: la misma factura repartida distinto, facturas que solo tiene
+   uno de los dos, y coste que entra en existencias sin pasar por factura. */
+const CGRP={reparto:'reparto',otra_obra:'solo_uno',solo_ana:'solo_uno',no_ana:'solo_uno',
+            residuo:'activacion',directa:'activacion'};
 const CTIP={
-  reparto:['La analítica reparte la factura de otra manera','El apunte está en los dos sitios pero con importe distinto: la analítica lo trocea entre proyectos y fases, o lo suma con otro signo.'],
-  otra_obra:['Facturas que imputo aquí y la analítica no','Yo cargo el apunte a esta promoción; la analítica se lo lleva entero a otro proyecto.'],
-  solo_ana:['Apuntes de la analítica que no encuentro en el diario','La analítica los imputa a esta promoción pero no hay un apunte del diario con esa fecha, cuenta y concepto.'],
-  no_ana:['Apuntes míos que la analítica no recoge','Sociedades vehículo, que no entran en ese fichero, y movimientos posteriores a su fecha de corte.'],
-  residuo:['Activación que no pasa por factura',''],
-  directa:['Compra de suelo e inmovilizado directa','Entra en existencias o en inmovilizado sin pasar por una cuenta de gasto.'],
+  reparto:['La misma factura, repartida de otra manera','Está en los dos sitios pero con importes distintos: la analítica la trocea entre proyectos y fases, o la suma con otro signo.'],
+  solo_uno:['Facturas que solo tiene uno de los dos','Apuntes que yo imputo aquí y la analítica lleva a otro proyecto, apuntes suyos que no encuentro en el diario, y movimientos míos que su fichero no recoge por ser de sociedad vehículo o posteriores a su corte.'],
+  activacion:['Coste que entra en existencias sin factura','Compras de suelo e inmovilizado que no pasan por una cuenta de gasto, y la parte que el contable activa cada mes por encima del gasto del periodo.'],
 };
 function concFilas(cod){
   const it=CONC[cod]||[], g={};
-  it.forEach(x=>{(g[x.t]=g[x.t]||{n:0,imp:0,it:[]}); g[x.t].n++; g[x.t].imp+=x.imp; g[x.t].it.push(x);});
+  it.forEach(x=>{const k=CGRP[x.t]||x.t;
+    (g[k]=g[k]||{n:0,imp:0,it:[]}); g[k].n++; g[k].imp+=x.imp; g[k].it.push(x);});
   return Object.entries(g).sort((a,b)=>Math.abs(b[1].imp)-Math.abs(a[1].imp));
 }
 function concDetalle(cod,t){
@@ -1809,6 +1792,10 @@ function concDetalle(cod,t){
     const i=x.i, r=i!=null?APU[i]:null;
     const txt=r?esc(r[3])+(r[4]&&r[4]!==r[3]?'<div class="muted small">'+esc(r[4])+'</div>':''):'<span class="muted">—</span>';
     const rep=[];
+    const SUB={otra_obra:'la analítica lo lleva a otro proyecto',solo_ana:'no aparece en el diario',
+               no_ana:'la analítica no lo recoge',residuo:'activación sobre el gasto del periodo',
+               directa:'compra directa a existencias'};
+    if(SUB[x.t]) rep.push('<i>'+SUB[x.t]+'</i>');
     if(x.otros&&Object.keys(x.otros).length) rep.push('analítica → '+Object.entries(x.otros).map(([k,v])=>`${esc(PMAP[k]?.nom||k)} ${eur(v)}`).join(' · '));
     if(x.mios&&Object.keys(x.mios).length) rep.push('yo también → '+Object.entries(x.mios).map(([k,v])=>`${esc(PMAP[k]?.nom||k)} ${eur(v)}`).join(' · '));
     return {c:[{v:r?r[1]:'—'},{v:r?'<span class="pill">'+esc(r[5])+'</span>':''},
@@ -1952,26 +1939,13 @@ function vCal(){
   return k+alertas.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+
    `<div class="card"><h3>Criterios de asignación aplicados</h3><div class="cbody">${tReglas}
      <div class="legend">Ninguna partida se reparte por estimación. Lo que no encaja en un criterio verificable permanece en una bandeja y se muestra íntegro más abajo.</div></div></div>
-   <div class="card"><h3>Coste real contable frente al ejecutado del estudio económico <span class="note">acumulado a ${esc(DATA.meta.ultimo)}</span></h3><div class="cbody">
-     ${tbl([{t:'Promoción',l:1},{t:'Real contable'},{t:'Ejecutado (estudio)'},{t:'Diferencia'},{t:'%'},{t:'Pdte. de activar'},{t:'Por explicar'}],cmp)}
-     <div class="legend"><b>Pincha en el nombre de cualquier promoción</b> y se despliega debajo la lista de facturas que explican su diferencia, con un desplegable en cada línea para cambiarle la obra.
-     <i>Pdte. de activar</i> es el gasto ya contabilizado en meses posteriores al último asiento de variación de existencias: está en los libros pero todavía no forma parte del coste de la obra. <i>Por explicar</i> es la diferencia que queda una vez incorporado.
-     El resto responde a que la columna <i>Ejecutado</i> del estudio no esté actualizada al último cierre, o a que el estudio recoja conceptos que la contabilidad no activa en existencias.</div></div></div>
    <div class="card"><h3>Mi reparto por promoción frente a la analítica de contabilidad <span class="note">analítica hasta ${esc(DATA.ana?.corte||'—')}</span></h3><div class="cbody">
      ${tAna}
      <div class="legend">Columna <i>Mi reparto</i>: coste que este cuadro imputa a cada promoción, leyendo los diarios y aplicando los criterios de la tabla de arriba. Columna <i>Analítica</i>: lo que el fichero de analítica de contabilidad asigna a ese mismo proyecto.
      Para comparar lo mismo se descuenta de mi reparto lo que la analítica no recoge —las sociedades vehículo, que no entran en el fichero, y el asiento de apertura— y se compara contra la analítica a su fecha de corte.
      <b>Pincha en cualquier promoción y la diferencia se descompone en partidas concretas que suman esa cifra exacta</b>, cada una con sus facturas y con el reparto que hace cada uno. No hay residuo ni nada que dar por bueno a mano.
      En seis de las ocho promociones con estudio la cifra de la analítica y la columna <i>Ejecutado</i> del estudio económico son idénticas al céntimo, y sus capítulos son las secciones de la analítica agrupadas, de modo que este desglose explica también la diferencia contra el estudio.</div></div></div>
-   <div class="card"><h3>Conciliación entre gasto contabilizado y coste imputado a promociones</h3><div class="cbody scroll">${tConc}
-     <div class="legend">El coste imputado incluye compras de suelo e inmovilizado de promoción, que no son gasto del ejercicio: por eso puede superar al gasto contabilizado.</div></div></div>
    <div class="grid1">
-     ${(DATA.pdfsin&&DATA.pdfsin.length)?`<div class="card"><h3>Facturas escaneadas sin correspondencia contable <span class="note">${nf0.format(DATA.pdfsin.length)} ficheros</span></h3><div class="cbody scroll">
-       ${tbl([{t:'Fichero',l:1},{t:'Carpeta',l:1},{t:'Fecha leída',l:1},{t:'Mayor importe leído'}],
-         DATA.pdfsin.slice(0,400).map(x=>({c:[{v:pdfLink(x[1]+'/'+x[0],'<b>'+esc(x[0])+'</b>')},{v:esc(x[1])},
-           {v:x[2]||'<span class="muted">no legible</span>'},{v:x[3]?eur(x[3]):'<span class="muted">no legible</span>'}]})))}
-       <div class="legend">El reconocimiento de texto no ha podido casar estas facturas con ningún apunte del registro: escaneos de baja calidad, recibos que no son factura de proveedor o documentos de otro ejercicio. Se listan para revisión manual y no se enlazan desde ninguna otra pestaña, para no mostrar una factura equivocada.</div>
-       </div></div>`:''}
      <div class="card"><h3>Bandeja «Sin asignar» · detalle por cuenta <span class="note">${eur(cq.sin)} de gasto de estructura</span></h3><div class="cbody scroll">${tSin}</div></div>
    </div>
    <div class="card"><h3>Facturas de proveedor sin pago identificado o con pago parcial <span class="note">${nf0.format(frSin.length)} facturas · ${eur(frSin.reduce((a,x)=>a+x[6],0))} pendiente</span></h3><div class="cbody scroll">${tFr}</div></div>
@@ -1981,7 +1955,29 @@ function vCal(){
 function cCal(){repWire();}
 
 /* ============================== ARRANQUE ============================== */
-const TABS=[['res','Resumen'],['pyg','P&L'],['pres','Presupuesto vs Real'],['caja','Caja'],['com','Comercial'],['obr','Obra'],['pro','Proyección'],['deuda','Deuda'],['ter','Clientes y proveedores'],['ana','Analítica'],['det','Detalle'],['cal','Calidad de datos']];
+/* Seis pestanas. Lo que antes estaba repartido en doce se agrupa por decision:
+   la promocion entera en una vista, todo el dinero en otra, y una sola
+   conciliacion en lugar de las cinco versiones que habia del mismo cuadre. */
+const TABS=[['res','Resumen'],['prom','Promoción'],['caja','Caja y deuda'],
+            ['com','Comercial'],['conc','Conciliación'],['det','Detalle']];
+const sep=t=>`<div class="secdiv"><span>${esc(t)}</span></div>`;
+/* Al encadenar vistas dentro de una misma pestana, solo la primera conserva su fila de
+   indicadores: las demas repetian metricas que ya estaban arriba. */
+function sinK(h){const i=h.indexOf('<div class="kpis">');
+  if(i<0) return h;
+  let j=i,prof=0;
+  while(j<h.length){
+    const a=h.indexOf('<div',j), b=h.indexOf('</div>',j);
+    if(b<0) return h;
+    if(a>=0&&a<b){prof++;j=a+4;} else {prof--;j=b+6; if(prof===0) return h.slice(0,i)+h.slice(j);}
+  }
+  return h;}
+function vProm(){return vPyg()+sep('Presupuesto frente a real')+sinK(vPres())+sep('Ejecución de obra')+sinK(vObra());}
+function cProm(){cPyg?.();cPres?.();cObra?.();}
+function vDinero(){return vCaja()+sep('Deuda con entidades')+sinK(vDeuda())+sep('Proyección de tesorería')+sinK(vProy());}
+function cDinero(){cCaja?.();cDeuda?.();cProy?.();}
+function vConc(){return vCal()+sep('Clientes y proveedores')+sinK(vTer());}
+function cConc(){cCal?.();cTer?.();}
 function bandaInfo(){
   const it=[];
   if(SEL===CONS){
@@ -2026,8 +2022,8 @@ function render(){
     ${marca}
     <div class="pmeta"><b>${esc(nom)}</b>${est}<div>${sub}</div></div>
     <div class="pstats">${bandaInfo()}</div></div>`;
-  document.getElementById('main').innerHTML=({res:vRes,pyg:vPyg,pres:vPres,caja:vCaja,com:vCom,obr:vObra,pro:vProy,deuda:vDeuda,ter:vTer,ana:vAna,det:vDet,cal:vCal})[TAB]();
-  ({res:cRes,pyg:cPyg,pres:cPres,caja:cCaja,com:cCom,obr:cObra,pro:cProy,deuda:cDeuda,ter:cTer,ana:cAna,det:cDet,cal:cCal})[TAB]?.();
+  document.getElementById('main').innerHTML=({res:vRes,prom:vProm,caja:vDinero,com:vCom,conc:vConc,det:vDet})[TAB]();
+  ({res:cRes,prom:cProm,caja:cDinero,com:cCom,conc:cConc,det:cDet})[TAB]?.();
   document.getElementById('footer').innerHTML=
    `Promociones Urbanas Montellano, S.L. · Documento de uso interno. `+
    `Fuente: diarios contables 2023-2026 de las ${DATA.meta.sociedades.length} sociedades del grupo, presupuestos operativos por promoción, analítica contable y registro de facturas emitidas y recibidas. `+

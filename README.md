@@ -32,7 +32,7 @@ En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pes
 
 **Detalle.** Drill-down con filtros hasta el apunte contable, la factura recibida, la factura emitida y el cobro.
 
-**Calidad de datos.** Criterios de asignación aplicados, bandeja «Sin asignar», conciliaciones, facturas sin pago identificado y descuadres. Incluye el contraste entre el coste real contable y el ejecutado del estudio económico, con **reparto de coste**: pinchando en cualquier promoción se abre el puente de su diferencia, los asientos de activación que forman el Real contable, las facturas de proveedor que hay detrás, el gasto todavía sin activar y la bandeja de candidatos sin obra. La obra de cualquier apunte se puede cambiar en pantalla: las cifras se recalculan al momento y las decisiones se descargan en JSON o CSV para incorporarlas al ETL.
+**Conciliación.** Criterios de asignación aplicados, bandeja «Sin asignar», conciliaciones, facturas sin pago identificado y descuadres. Incluye el contraste entre el coste real contable y el ejecutado del estudio económico, con **reparto de coste**: pinchando en cualquier promoción se abre el puente de su diferencia, los asientos de activación que forman el Real contable, las facturas de proveedor que hay detrás, el gasto todavía sin activar y la bandeja de candidatos sin obra. La obra de cualquier apunte se puede cambiar en pantalla: las cifras se recalculan al momento y las decisiones se descargan en JSON o CSV para incorporarlas al ETL.
 
 ## Fuentes
 
