@@ -1842,6 +1842,12 @@ function concPanel(cod){
   return `<div class="expwrap">
     <div style="font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:4px">De mi cifra a la suya, paso a paso</div>
     <div class="legend" style="margin:0 0 12px">Se parte del coste que la contabilidad imputa a ${esc(PMAP[cod]?.nom||cod)} y se van sumando y restando los motivos hasta llegar exactamente a la cifra de la analítica.</div>
+    <div class="toolbar">
+      <button class="btn pri" id="rpExp"${(nOv()||nOvc())?'':' disabled'}>Descargar cambios de obra${(nOv()+nOvc())?' ('+(nOv()+nOvc())+')':''}</button>
+      <button class="btn" id="rpCsv"${(nOv()||nOvc())?'':' disabled'}>Descargar en CSV</button>
+      <button class="btn" id="rpDes"${(nOv()||nOvc())?'':' disabled'}>Deshacer todo</button>
+      <span class="muted small">${nOv()+nOvc()?(nOv()+nOvc())+' apunte(s) reasignado(s). Nada se ha modificado en la contabilidad.':'Cambia la obra de una factura en el detalle y aquí podrás descargar la propuesta.'}</span>
+    </div>
     ${Math.abs(ctrl-(cm.ana||0))>0.05?`<div class="alert bad"><b>Aviso.</b> El puente no cierra por ${eur(ctrl-(cm.ana||0))}.</div>`:''}
     ${tbl([{t:'Concepto',l:1},{t:'Importe'}],filas)}
     <div class="legend">Las líneas intermedias suman <b>exactamente</b> la diferencia entre las dos cifras: no queda residuo. Pincha cualquiera para ver las facturas concretas, cómo las reparte cada uno y cambiar la obra si alguna está mal imputada.</div>
