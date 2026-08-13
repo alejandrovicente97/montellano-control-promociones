@@ -127,7 +127,9 @@ const gopt={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',
  y:{grid:{color:'#eef1f6'},ticks:{font:{size:10.5},callback:v=>kEur(v)}}}};
 function tbl(head,rows){
   let h='<table><thead><tr>'+head.map(x=>`<th class="${x.l?'l':''}">${x.t}</th>`).join('')+'</tr></thead><tbody>';
-  h+=rows.map(r=>`<tr class="${r.cls||''}" ${r.attr||''}>`+r.c.map((c,i)=>`<td class="${head[i].l?'l':''} ${c.cls||''}">${c.v??c}</td>`).join('')+'</tr>').join('');
+  h+=rows.map(r=>r.raw!=null
+    ? `<tr class="${r.cls||''}" ${r.attr||''}>${r.raw}</tr>`
+    : `<tr class="${r.cls||''}" ${r.attr||''}>`+r.c.map((c,i)=>`<td class="${head[i].l?'l':''} ${c.cls||''}">${c.v??c}</td>`).join('')+'</tr>').join('');
   return h+'</tbody></table>';
 }
 function barPct(p,color){const w=Math.max(0,Math.min(100,p||0));
@@ -1221,6 +1223,11 @@ function vObra(){
   if(sob.length) al.push({t:'',h:'Capítulos por encima de la contrata',
     x:`${sob.length} capítulos superan la contrata aplicada, en conjunto ${eur0(sob.reduce((a,[,v])=>a+v.real-v.apl,0))}: `+
       sob.slice(0,4).map(([n,v])=>`<b>${esc(n)}</b> ${eur0(v.real-v.apl)}`).join(', ')+'.'});
+  const conObra=o.cs.filter(c=>(MOD()[c].obraMes||[]).some(x=>Math.abs(x[1])>1000));
+  const sinObra=o.cs.filter(c=>!conObra.includes(c));
+  if(sinObra.length) al.push({t:'',h:'Promociones sin obra oficial en ejecución',
+    x:`${sinObra.map(c=>`<b>${esc(PMAP[c].nom)}</b>`).join(', ')} ${sinObra.length>1?'no tienen':'no tiene'} obra en ejecución todavía, así que ${sinObra.length>1?'sus curvas':'su curva'} de certificación ${sinObra.length>1?'están':'está'} a cero y solo se muestra el cronograma previsto. `+
+      `La columna «Real» de capítulos únicamente se rellena en las promociones con obra oficial en marcha, porque el coste se imputa factura a factura según indica el jefe de obra.`});
   if(!o.alcance) al.push({t:'',h:'Cómo leer esta curva',
     x:`La línea planificada sale del cronograma de obra del estudio económico de cada promoción; la real, del movimiento mensual de las cuentas 606 de obra en la contabilidad. La comparación es de <i>coste certificado</i>, no de avance físico: un retraso en la certificación puede deberse a obra no ejecutada o a certificaciones pendientes de emitir.`});
 
@@ -1375,8 +1382,8 @@ function vProy(){
     x:`El plan lleva la deuda viva de ${eur0(p.deu0)} a <b>${eur0(p.deu1)}</b> en ${HOR} meses. Ese salto se apoya en préstamos promotor de `+
       pend.map(c=>`<b>${esc(PMAP[c].nom)}</b> (${eur0((MOD()[c].fin||{}).limite||0)})`).join(', ')+
       ` que a día de hoy no tienen saldo dispuesto en la contabilidad. Sin esas formalizaciones, el saldo de caja de este calendario no se sostiene: la caja proyectada de ${eur0(p.saldo[HOR-1])} incorpora ${eur0(sum(p.disp))} de disposiciones.`});
-  al.push({t:'',h:'Qué es esta proyección y qué no',
-    x:`Es el cronograma del estudio económico de cada promoción proyectado desde el último cierre real, no una previsión revisada con la obra en la mano. Los cobros son los del cuadro de compradores —10 % a contrato, aplazados y 80 % a escritura—; los pagos, el avance de obra y los gastos no imputables a obra del propio modelo. Si la obra va con retraso, este calendario se desplaza: cotéjalo con la pestaña <b>Obra</b>.`});
+  al.push({t:'',h:'Esto es una simulación, no un calendario',
+    x:`Las disposiciones del préstamo promotor dependen de las certificaciones de obra según su ejecución real, y la amortización se produce al escriturar cada vivienda: ninguna de las dos cosas se puede fijar de antemano. Lo que ves es el cronograma del estudio económico proyectado desde el último cierre, útil para dimensionar la necesidad de financiación y anticipar el punto de tensión, pero no un calendario comprometido. Los cobros son los del cuadro de compradores —10 % a contrato, aplazados y 80 % a escritura—; los pagos, el avance de obra y los gastos no imputables a obra del propio modelo. Si la obra se desplaza, este calendario se desplaza con ella: cotéjalo con la pestaña <b>Obra</b>.`});
 
   const rows=p.ms.map((m,i)=>({cls:i===p.iMin?'sub2':'',c:[
     {v:esc(MLBL[m]||m)},
@@ -1465,6 +1472,212 @@ function cProy(){
     {type:'line',label:'Saldo de caja',data:p.saldo,borderColor:'#102C57',borderWidth:2,tension:.25,pointRadius:0,yAxisID:'y'}]},
     options:{...gopt,scales:{...gopt.scales,x:{...gopt.scales.x,stacked:true},y:{...gopt.scales.y,stacked:false}}}});
 }
+/* =============================================================================
+   REPARTO DE COSTE
+   Explica y permite corregir la diferencia entre el coste real contable y el
+   ejecutado del estudio economico, promocion a promocion.
+
+   De donde sale cada cosa
+     - "Real contable" lo forman los asientos de activacion en existencias
+       (cuentas 33x de la matriz, 313x/21000x/23100x de solar e inmovilizado y
+       las sociedades vehiculo). Son pocos apuntes y son los que mandan.
+     - Detras de cada activacion mensual esta el gasto 6xx contabilizado en el
+       mes: las facturas de proveedor. Ese es el detalle que se lista aqui.
+     - El coste incurrido en meses posteriores al ultimo asiento de variacion de
+       existencias todavia no forma parte del Real contable. Es la causa
+       mecanica de buena parte de las diferencias y se aisla en el puente.
+
+   Reasignar un apunte no toca el fichero de datos: se guarda en memoria, la
+   tabla se recalcula al momento y las decisiones se descargan en un fichero
+   para incorporarlas al ETL como regla permanente.
+   ============================================================================= */
+const RP=DATA.rep||{};
+const APU=DATA.apuntes||[];
+/* apunte: 0 soc 1 fecha 2 asiento 3 concepto 4 descripcion 5 cuenta 6 debe 7 haber 8 promo 9 naturaleza 10 ejercicio */
+const RPS={sel:null, ov:{}, vista:'pen', q:'', tope:120};
+
+const apDebe=i=>APU[i][6]||0;
+const apNeto=i=>(APU[i][6]||0)-(APU[i][7]||0);
+const apMes =i=>{const f=APU[i][1];return f.slice(6,10)+'-'+f.slice(3,5);};
+const apPdf =i=>(RP.pdf||{})[i]||null;
+const destino=(i,base)=>(RPS.ov[i]!==undefined?RPS.ov[i]:base);
+const nOv=()=>Object.keys(RPS.ov).length;
+
+/* ---- recalculo completo teniendo en cuenta las reasignaciones en pantalla ---- */
+function repCalc(){
+  const real={},pend={},gas={},nGas={};
+  const act=RP.act||{}, gg=RP.gas||{}, ua=RP.ultAct||{};
+  for(const p in act) for(const i of act[p]){const d=destino(i,p); real[d]=(real[d]||0)+apDebe(i);}
+  for(const p in gg)  for(const i of gg[p]){
+    const d=destino(i,p), v=apNeto(i);
+    gas[d]=(gas[d]||0)+v; nGas[d]=(nGas[d]||0)+1;
+    const u=ua[d]; if(u&&apMes(i)>u) pend[d]=(pend[d]||0)+v;
+  }
+  return {real,pend,gas,nGas};
+}
+
+/* ---- desplegable de obra para un apunte ---- */
+function oSel(i,base){
+  const d=destino(i,base), mod=d!==base;
+  const op=P_REAL.map(p=>`<option value="${p.cod}"${p.cod===d?' selected':''}>${esc(p.nom)}</option>`).join('')
+    +`<option value="SIN_ASIGNAR"${d==='SIN_ASIGNAR'?' selected':''}>— Sin asignar / Estructura —</option>`;
+  return `<select class="osel${mod?' mod':''}" data-i="${i}" data-base="${base}" title="${mod?'Reasignado desde '+esc(PMAP[base]?.nom||base):'Obra segun la contabilidad'}">${op}</select>`;
+}
+
+/* ---- tabla de apuntes con selector ---- */
+function repTabla(idx,base,opt){
+  opt=opt||{};
+  const q=(RPS.q||'').toLowerCase().trim();
+  let f=idx.slice();
+  if(q) f=f.filter(i=>{const r=APU[i];
+    return (r[3]+' '+r[4]+' '+r[5]+' '+r[0]+' '+r[1]).toLowerCase().includes(q);});
+  f.sort((a,b)=>Math.abs(apNeto(b))-Math.abs(apNeto(a)));
+  const n=f.length, corte=f.slice(0,RPS.tope);
+  const filas=corte.map(i=>{const r=APU[i], b=opt.base||r[8], mod=destino(i,b)!==b;
+    const txt=esc(r[3])+(r[4]&&r[4]!==r[3]?'<div class="muted small">'+esc(r[4])+'</div>':'');
+    return {cls:mod?'mod':'',c:[
+      {v:r[1]},
+      {v:'<span class="pill">'+esc(r[5])+'</span>'},
+      {v:apPdf(i)?pdfLink(apPdf(i),txt):txt,cls:'l'},
+      {v:esc(SOCN[r[0]]||r[0]),cls:'l'},
+      {v:eur(opt.debe?apDebe(i):apNeto(i))},
+      {v:oSel(i,b),cls:'l'}]};});
+  const t=tbl([{t:'Fecha'},{t:'Cuenta',l:1},{t:'Concepto',l:1},{t:'Sociedad',l:1},{t:'Importe'},{t:'Obra imputada',l:1}],filas);
+  const tot=f.reduce((a,i)=>a+(opt.debe?apDebe(i):apNeto(i)),0);
+  const pie=n>corte.length
+    ? `<div class="legend">Se muestran los ${nf0.format(corte.length)} apuntes de mayor importe de ${nf0.format(n)}, que suman ${eur(tot)}. Acota con el buscador o <button class="btn" id="rpMas" style="padding:3px 9px;font-size:11.2px">ver ${nf0.format(Math.min(500,n-corte.length))} más</button></div>`
+    : (n?`<div class="legend">${nf0.format(n)} apuntes, ${eur(tot)} en total.</div>`
+        :`<div class="legend">No hay apuntes que cumplan el filtro.</div>`);
+  return `<div class="scroll">${t}</div>${pie}`;
+}
+
+/* ---- puente de la diferencia ---- */
+function repPuente(cod,c){
+  const real=c.real[cod]||0, pend=c.pend[cod]||0, ej=(RP.ejec||{})[cod];
+  const aj=real+pend, dif=ej!=null?aj-ej:null, difBruta=ej!=null?real-ej:null;
+  const ua=(RP.ultAct||{})[cod];
+  const f=[
+    {c:[{v:'<b>Real contable</b><div class="muted small">Activación en existencias acumulada a '+esc(DATA.meta.ultimo)+'</div>',cls:'l'},{v:eur(real)}]},
+    {c:[{v:'Coste incurrido posterior al último cierre activado<div class="muted small">Gasto contabilizado después de '+(ua?esc(MLBL[ua]||ua):'—')+', todavía sin asiento de variación de existencias</div>',cls:'l'},{v:eur(pend),cls:pend?'wrn':''}]},
+    {cls:'tot',c:[{v:'<b>Real contable ajustado</b>',cls:'l'},{v:eur(aj)}]},
+  ];
+  if(ej!=null){
+    f.push({c:[{v:'Ejecutado según el estudio económico',cls:'l'},{v:eur(ej)}]});
+    f.push({cls:'tot',c:[{v:'<b>Diferencia por explicar</b>'+(ej?' <span class="muted small">('+pct1(100*dif/ej)+')</span>':''),cls:'l'},
+      {v:eur(dif),cls:Math.abs(dif)>150000?'neg':(Math.abs(dif)>50000?'wrn':'pos')}]});
+  }
+  const t=tbl([{t:'Concepto',l:1},{t:'Importe'}],f);
+  let nota='';
+  if(ej!=null&&difBruta!=null&&pend){
+    const abs0=Math.abs(difBruta), abs1=Math.abs(dif);
+    nota=abs1<abs0
+      ? `El cierre pendiente explica ${eur(Math.abs(abs0-abs1))} de la diferencia inicial de ${eur(difBruta)}. Queda por explicar ${eur(dif)}.`
+      : `El cierre pendiente no acerca las dos cifras: la diferencia pasa de ${eur(difBruta)} a ${eur(dif)}, lo que apunta a que el estudio y la contabilidad no recogen los mismos conceptos.`;
+  }
+  return `${t}${nota?`<div class="legend">${nota}</div>`:''}`;
+}
+
+/* ---- bloque desplegable que se abre dentro de la propia tabla de diferencias ---- */
+function repPanel(cod,c){
+  const nom=PMAP[cod]?.nom||cod;
+  const iAct=(RP.act||{})[cod]||[], iGas=(RP.gas||{})[cod]||[], iPen=(RP.pend||{})[cod]||[];
+  const iSin=RP.sin||[];
+  /* apuntes traídos desde otras obras por el usuario */
+  const traidos=Object.keys(RPS.ov).map(Number).filter(i=>RPS.ov[i]===cod&&APU[i][8]!==cod);
+  const real=c.real[cod]||0, pend=c.pend[cod]||0, ej=(RP.ejec||{})[cod];
+  const dif=ej!=null?real-ej:null, dif2=ej!=null?real+pend-ej:null;
+
+  /* resumen en tarjetas: de qué se compone la diferencia de esta promoción */
+  const cab=`<div class="pback">
+    <div><div class="l">Diferencia a explicar</div><div class="v ${dif!=null&&Math.abs(dif)>150000?'neg':''}">${eur(dif)}</div><div class="d">Real contable menos ejecutado del estudio</div></div>
+    <div><div class="l">Facturas sin activar</div><div class="v ${pend?'wrn':''}">${eur(pend)}</div><div class="d">${nf0.format(iPen.length)} facturas posteriores al último cierre activado</div></div>
+    <div><div class="l">Queda por explicar</div><div class="v ${dif2!=null&&Math.abs(dif2)>150000?'neg':'pos'}">${eur(dif2)}</div><div class="d">Una vez incorporadas esas facturas</div></div>
+   </div>`;
+
+  const V=[['pen','Facturas que explican la diferencia',iPen.length],
+           ['gas','Todas las facturas imputadas',iGas.length],
+           ['act','Asientos que forman el Real contable',iAct.length],
+           ['sin','Facturas sin obra asignada',iSin.length],
+           ['puente','Puente completo',null]];
+  const tabs=V.filter(v=>v[2]===null||v[2]>0).map(v=>
+    `<div class="rtab ${RPS.vista===v[0]?'on':''}" data-v="${v[0]}">${v[1]}${v[2]!=null?`<span class="n">${nf0.format(v[2])}</span>`:''}</div>`).join('');
+  let cuerpo='';
+  if(RPS.vista==='puente') cuerpo=repPuente(cod,c);
+  else if(RPS.vista==='act') cuerpo=repTabla(iAct,cod,{debe:1,base:cod})
+    +`<div class="legend">Estos son los asientos de variación de existencias que forman literalmente el <b>Real contable</b> de la promoción. No son facturas: cada uno agrupa el coste de un mes entero. Cambiar la obra de cualquiera de ellos mueve la cifra al momento, aquí y en la tabla de arriba.</div>`;
+  else if(RPS.vista==='gas') cuerpo=repTabla(iGas.concat(traidos),cod)
+    +`<div class="legend">Todas las facturas de proveedor y demás gasto que la contabilidad imputa a esta promoción: es el detalle que hay detrás de cada asiento mensual de variación de existencias. Reasignarlas corrige la trazabilidad y el coste por naturaleza; el Real contable se moverá cuando el asiento de variación de existencias recoja el cambio.</div>`;
+  else if(RPS.vista==='pen') cuerpo=(iPen.length?repTabla(iPen,cod):'<div class="legend">Esta promoción no tiene facturas posteriores al último cierre activado, de modo que su diferencia con el estudio no viene de un cierre pendiente sino de conceptos que el estudio recoge y la contabilidad no activa en existencias. Mira el puente completo.</div>')
+    +(iPen.length?`<div class="legend">Estas son las facturas que justifican la diferencia por el lado contable: están contabilizadas pero son posteriores al último asiento de variación de existencias, así que todavía no forman parte del coste de la obra. Al cambiar la obra de cualquiera de ellas, las tres tarjetas de arriba y la tabla se recalculan al momento.</div>`:'');
+  else if(RPS.vista==='sin') cuerpo=repTabla(iSin,'SIN_ASIGNAR')
+    +`<div class="legend">Gasto que hoy no está imputado a ninguna promoción: estructura, personal, tributos generales, servicios centrales e intereses del grupo. Si alguno corresponde en realidad a esta obra, elígela en el desplegable y quedará recogido en el fichero de reasignaciones.</div>`;
+  const acc=[`<button class="btn pri" id="rpExp"${nOv()?'':' disabled'}>Descargar reasignaciones${nOv()?' ('+nOv()+')':''}</button>`,
+             `<button class="btn" id="rpCsv"${nOv()?'':' disabled'}>Descargar en CSV</button>`,
+             `<button class="btn" id="rpDes"${nOv()?'':' disabled'}>Deshacer todo</button>`,
+             `<button class="btn" id="rpCerrar">Cerrar</button>`].join('');
+  return `<div class="expwrap">
+    <div style="font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:11px">Facturas y asientos que explican la diferencia de ${esc(nom)}</div>
+    ${cab}
+    <div class="rtabs">${tabs}</div>
+    <div class="toolbar">
+      ${RPS.vista==='puente'?'':`<input type="search" id="rpQ" placeholder="Buscar por concepto, cuenta, fecha o sociedad" value="${esc(RPS.q)}">`}
+      ${acc}
+      <span class="muted small">${nOv()?nOv()+' apunte(s) reasignado(s) en pantalla. Nada se ha modificado en la contabilidad.':''}</span>
+    </div>
+    ${cuerpo}
+  </div>`;
+}
+
+/* ---- descarga de las decisiones ---- */
+function repDatos(){
+  return Object.keys(RPS.ov).map(Number).sort((a,b)=>a-b).map(i=>{const r=APU[i];
+    return {apunte:i, sociedad:r[0], fecha:r[1], asiento:r[2], cuenta:r[5], concepto:r[3], descripcion:r[4],
+            importe:apNeto(i), debe:r[6], haber:r[7], naturaleza:r[9], ejercicio:r[10],
+            obra_contabilidad:r[8], obra_asignada:RPS.ov[i],
+            obra_contabilidad_nom:PMAP[r[8]]?.nom||r[8], obra_asignada_nom:PMAP[RPS.ov[i]]?.nom||RPS.ov[i]};});
+}
+function repBaja(nombre,texto,tipo){
+  const b=new Blob([texto],{type:tipo+';charset=utf-8'}), u=URL.createObjectURL(b);
+  const a=document.createElement('a'); a.href=u; a.download=nombre; document.body.appendChild(a); a.click();
+  document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(u),2000);
+}
+function repExporta(){
+  const d=repDatos();
+  const j={generado:new Date().toISOString().slice(0,19).replace('T',' '),
+           origen:'Cuadro de control de promociones · Promociones Urbanas Montellano, S.L.',
+           cierre:DATA.meta.ultimo, datos:DATA.meta.generado||null, n:d.length,
+           nota:'Cada linea reasigna un apunte del diario a otra obra. El campo apunte es la posicion en la lista de apuntes del fichero de datos con el que se genero este cuadro; sociedad, fecha, asiento y cuenta lo identifican de forma univoca en la contabilidad.',
+           reasignaciones:d};
+  repBaja('reasignaciones-coste-'+(DATA.meta.ultimo||'').replace(/\//g,'-')+'.json',JSON.stringify(j,null,1),'application/json');
+}
+function repExportaCsv(){
+  const d=repDatos();
+  const col=['apunte','sociedad','fecha','asiento','cuenta','concepto','descripcion','importe','naturaleza','ejercicio','obra_contabilidad','obra_contabilidad_nom','obra_asignada','obra_asignada_nom'];
+  const esc2=v=>{const s=String(v==null?'':v); return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
+  const txt='﻿'+col.join(';')+'\n'+d.map(r=>col.map(k=>esc2(k==='importe'?String(r[k]).replace('.',','):r[k])).join(';')).join('\n');
+  repBaja('reasignaciones-coste-'+(DATA.meta.ultimo||'').replace(/\//g,'-')+'.csv',txt,'text/csv');
+}
+
+/* ---- conexion de eventos del panel ---- */
+function repWire(){
+  document.querySelectorAll('#main tr.clkp').forEach(tr=>tr.onclick=ev=>{
+    if(ev.target.closest('select,a,button')) return;
+    const p=tr.dataset.p; RPS.sel=(RPS.sel===p?null:p); RPS.vista='pen'; RPS.q=''; RPS.tope=120; render();});
+  document.querySelectorAll('#main .rtab').forEach(t=>t.onclick=()=>{RPS.vista=t.dataset.v; RPS.tope=120; render();});
+  document.querySelectorAll('#main select.osel').forEach(s=>s.onchange=()=>{
+    const i=+s.dataset.i, base=s.dataset.base;
+    if(s.value===base) delete RPS.ov[i]; else RPS.ov[i]=s.value;
+    render();});
+  const q=document.getElementById('rpQ');
+  if(q) q.oninput=()=>{clearTimeout(window.__rpT);
+    window.__rpT=setTimeout(()=>{const v=q.value; RPS.q=v; RPS.tope=120; render();
+      const n=document.getElementById('rpQ'); if(n){n.focus(); n.setSelectionRange(v.length,v.length);} },260);};
+  const m=document.getElementById('rpMas'); if(m) m.onclick=()=>{RPS.tope+=500; render();};
+  const x=document.getElementById('rpCerrar'); if(x) x.onclick=()=>{RPS.sel=null; render();};
+  const e=document.getElementById('rpExp'); if(e) e.onclick=repExporta;
+  const c=document.getElementById('rpCsv'); if(c) c.onclick=repExportaCsv;
+  const d=document.getElementById('rpDes'); if(d) d.onclick=()=>{RPS.ov={}; render();};
+}
 /* ============================== CALIDAD DE DATOS ============================== */
 function vCal(){
   const q=DATA.calidad, e=EJS===TODOS?'TOT':String(EJS), cq=q.porEj[e];
@@ -1521,9 +1734,22 @@ function vCal(){
     frSin.slice(0,60).map(x=>({c:[{v:esc(x[1])+'<div class="muted small">'+x[0]+'</div>'},{v:'<span class="pill">'+esc(x[2])+'</span>'},{v:x[3]},
       {v:eur(x[4])},{v:eur(x[5])},{v:eur(x[6]),cls:'wrn'},{v:'<span class="chip">'+esc(PMAP[x[8]]?.nom||x[8])+'</span>'}]})));
   // contraste real contable vs ejecutado del estudio
-  const cmp=P_REAL.filter(p=>p.pres).map(p=>{const x=DATA.pres[p.cod],real=S(p.cod,'actAc')[NM-1];
-    return {c:[{v:'<b>'+esc(p.nom)+'</b>'},{v:eur(real)},{v:eur(x.ejec)},{v:eur(real-x.ejec),cls:Math.abs(real-x.ejec)>200000?'wrn':''},
-      {v:x.ejec?pct1(100*(real-x.ejec)/x.ejec):'—'}]};});
+  const RC=repCalc();
+  const cmpP=P_REAL.filter(p=>p.pres);
+  const cmp=[];
+  cmpP.forEach(p=>{const x=DATA.pres[p.cod];
+    const real=RC.real[p.cod]||0, pend=RC.pend[p.cod]||0, dif=real-x.ejec, dif2=real+pend-x.ejec;
+    const ab=RPS.sel===p.cod;
+    cmp.push({cls:'clk clkp'+(ab?' sel':''),attr:`data-p="${p.cod}"`,c:[
+      {v:`<b>${esc(p.nom)}</b> <span class="lupa">${ab?'▾ ocultar facturas':'▸ ver facturas de la diferencia'}</span>`},
+      {v:eur(real)},{v:eur(x.ejec)},{v:eur(dif),cls:Math.abs(dif)>200000?'wrn':''},
+      {v:x.ejec?pct1(100*dif/x.ejec):'—'},
+      {v:pend?eur(pend):'<span class="muted">—</span>',cls:pend?'wrn':''},
+      {v:eur(dif2),cls:Math.abs(dif2)>200000?'neg':(Math.abs(dif2)>50000?'wrn':'pos')}]});
+    if(ab) cmp.push({raw:`<td class="expand l" colspan="7">${repPanel(p.cod,RC)}</td>`});});
+  {const tr=cmpP.reduce((a,p)=>{const x=DATA.pres[p.cod];a.r+=RC.real[p.cod]||0;a.e+=x.ejec;a.p+=RC.pend[p.cod]||0;return a;},{r:0,e:0,p:0});
+   cmp.push({cls:'tot',c:[{v:'<b>Total promociones con estudio</b>'},{v:eur(tr.r)},{v:eur(tr.e)},{v:eur(tr.r-tr.e)},
+     {v:tr.e?pct1(100*(tr.r-tr.e)/tr.e):'—'},{v:eur(tr.p)},{v:eur(tr.r+tr.p-tr.e)}]});}
   const tDesc=q.descuadres.length?tbl([{t:'Sociedad',l:1},{t:'Fecha'},{t:'Asiento'},{t:'Debe'},{t:'Haber'},{t:'Diferencia'}],
     q.descuadres.map(x=>({c:[{v:esc(x.soc)},{v:x.fecha},{v:x.asiento},{v:eur(x.debe)},{v:eur(x.haber)},{v:eur(x.dif),cls:'neg'}]}))):'';
   const tSc=q.sincuenta.length?tbl([{t:'Sociedad',l:1},{t:'Fecha'},{t:'Asiento'},{t:'Concepto',l:1},{t:'Descripción',l:1},{t:'Debe'},{t:'Haber'}],
@@ -1531,9 +1757,11 @@ function vCal(){
   return k+alertas.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+
    `<div class="card"><h3>Criterios de asignación aplicados</h3><div class="cbody">${tReglas}
      <div class="legend">Ninguna partida se reparte por estimación. Lo que no encaja en un criterio verificable permanece en una bandeja y se muestra íntegro más abajo.</div></div></div>
-   <div class="card"><h3>Coste real contable frente al ejecutado del estudio económico <span class="note">acumulado a 31/07/2026</span></h3><div class="cbody">
-     ${tbl([{t:'Promoción',l:1},{t:'Real contable'},{t:'Ejecutado (estudio)'},{t:'Diferencia'},{t:'%'}],cmp)}
-     <div class="legend">Diferencias relevantes indican que la columna <i>Ejecutado</i> del estudio no está actualizada al último cierre contable, o que el estudio incluye conceptos que la contabilidad no activa en existencias.</div></div></div>
+   <div class="card"><h3>Coste real contable frente al ejecutado del estudio económico <span class="note">acumulado a ${esc(DATA.meta.ultimo)}</span></h3><div class="cbody">
+     ${tbl([{t:'Promoción',l:1},{t:'Real contable'},{t:'Ejecutado (estudio)'},{t:'Diferencia'},{t:'%'},{t:'Pdte. de activar'},{t:'Por explicar'}],cmp)}
+     <div class="legend"><b>Pincha en el nombre de cualquier promoción</b> y se despliega debajo la lista de facturas que explican su diferencia, con un desplegable en cada línea para cambiarle la obra.
+     <i>Pdte. de activar</i> es el gasto ya contabilizado en meses posteriores al último asiento de variación de existencias: está en los libros pero todavía no forma parte del coste de la obra. <i>Por explicar</i> es la diferencia que queda una vez incorporado.
+     El resto responde a que la columna <i>Ejecutado</i> del estudio no esté actualizada al último cierre, o a que el estudio recoja conceptos que la contabilidad no activa en existencias.</div></div></div>
    <div class="card"><h3>Conciliación entre gasto contabilizado y coste imputado a promociones</h3><div class="cbody scroll">${tConc}
      <div class="legend">El coste imputado incluye compras de suelo e inmovilizado de promoción, que no son gasto del ejercicio: por eso puede superar al gasto contabilizado.</div></div></div>
    <div class="grid1">
@@ -1549,7 +1777,7 @@ function vCal(){
    ${q.descuadres.length?`<div class="card"><h3>Descuadres contables</h3><div class="cbody">${tDesc}</div></div>`:''}
    ${q.sincuenta.length?`<div class="card"><h3>Apuntes sin cuenta contable en el fichero de origen</h3><div class="cbody">${tSc}</div></div>`:''}`;
 }
-function cCal(){}
+function cCal(){repWire();}
 
 /* ============================== ARRANQUE ============================== */
 const TABS=[['res','Resumen'],['pyg','P&L'],['pres','Presupuesto vs Real'],['caja','Caja'],['com','Comercial'],['obr','Obra'],['pro','Proyección'],['deuda','Deuda'],['ter','Clientes y proveedores'],['ana','Analítica'],['det','Detalle'],['cal','Calidad de datos']];

@@ -32,7 +32,7 @@ En la cabecera hay dos selectores, de ejercicio y de promoción, y todas las pes
 
 **Detalle.** Drill-down con filtros hasta el apunte contable, la factura recibida, la factura emitida y el cobro.
 
-**Calidad de datos.** Criterios de asignación aplicados, bandeja «Sin asignar», conciliaciones, facturas sin pago identificado y descuadres.
+**Calidad de datos.** Criterios de asignación aplicados, bandeja «Sin asignar», conciliaciones, facturas sin pago identificado y descuadres. Incluye el contraste entre el coste real contable y el ejecutado del estudio económico, con **reparto de coste**: pinchando en cualquier promoción se abre el puente de su diferencia, los asientos de activación que forman el Real contable, las facturas de proveedor que hay detrás, el gasto todavía sin activar y la bandeja de candidatos sin obra. La obra de cualquier apunte se puede cambiar en pantalla: las cifras se recalculan al momento y las decisiones se descargan en JSON o CSV para incorporarlas al ETL.
 
 ## Fuentes
 
@@ -82,7 +82,7 @@ Los enlaces son rutas relativas, así que funcionan al abrir el dashboard desde 
 
 ## Verificación
 
-`verificar.py` vuelve a leer los diarios contables desde Excel, aplica el mismo criterio de exclusión de asientos técnicos y contrasta 153 magnitudes contra `DATA.json`: apuntes, partida doble, coste incurrido, obra en curso, ingresos, coste de las unidades entregadas, caja, deuda, saldos de clientes y proveedores cuenta a cuenta, tesorería, presupuesto, cuadro comercial, capítulos de obra, cronograma y analítica. Incluye además comprobaciones de coherencia interna: la misma magnitud no puede salir distinta en dos pestañas.
+`verificar.py` vuelve a leer los diarios contables desde Excel, aplica el mismo criterio de exclusión de asientos técnicos y contrasta 220 magnitudes contra `DATA.json`: apuntes, partida doble, coste incurrido, obra en curso, ingresos, coste de las unidades entregadas, caja, deuda, saldos de clientes y proveedores cuenta a cuenta, tesorería, presupuesto, cuadro comercial, capítulos de obra, cronograma, analítica y reparto de coste. Incluye además comprobaciones de coherencia interna: la misma magnitud no puede salir distinta en dos pestañas.
 
 ```
 python verificar.py
@@ -93,6 +93,14 @@ python verificar.py
 El coste incurrido se imputa a promoción por la cuenta de existencias 330000xx: es la propia contabilidad la que lo reparte por promoción y fase en el asiento mensual de variación de existencias, de modo que la cobertura es del 100 %. El resto de criterios —sociedad vehículo, cuenta de solar, cuenta 606 de obra, sufijo de promoción en la cuenta de cliente, serie de la factura emitida, número de préstamo y cuenta bancaria— sirven para el desglose por naturaleza, la tesorería y la deuda.
 
 Nada se reparte por estimación. Lo que no encaja en un criterio verificable permanece en la bandeja «Sin asignar» —estructura, tributos genéricos, servicios centrales e intereses con el grupo— y se muestra íntegro en la pestaña de calidad de datos.
+
+## Reparto de coste y diferencias con el estudio
+
+La columna *Ejecutado* del estudio económico es una cifra que se mantiene a mano en el Excel de cada promoción: no tiene facturas detrás. Las facturas solo existen del lado contable, así que la diferencia entre ambas columnas se explica por el lado que sí es trazable.
+
+El ETL aísla en `DATA.rep` cuatro conjuntos de apuntes por promoción: las **activaciones** en existencias, que son las que literalmente forman el Real contable; el **gasto 6xx** que la contabilidad imputa a la promoción, factura a factura; el **coste incurrido posterior al último asiento de variación de existencias**, que está en los libros pero todavía no forma parte del coste de ninguna obra; y la **bandeja** de gasto sin promoción, como candidatos. Sobre esos conjuntos, el cuadro construye el puente de la diferencia y permite reasignar la obra de cualquier apunte.
+
+Reasignar no toca `DATA.json`: la decisión vive en memoria, las tablas se recalculan al momento y el resultado se descarga en un fichero de reasignaciones. Ese fichero es lo que se incorpora al ETL como regla permanente, de modo que el cambio queda documentado y el cierre siguiente ya nace bien.
 
 ## Ficheros
 

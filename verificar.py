@@ -182,6 +182,60 @@ chk('Coherencia: pendiente de pago del detalle = suma de saldos acreedores',
     round(sum(x[8] for x in D['pend'] if x[0]=='Pago'),2),
     round(sum(-x['saldo'] for x in D['proveedores'] if x['saldo']<0),2),0.5)
 
+# ================= reparto de coste (bloque de diferencias) =================
+# El cuadro deja abrir cada promocion de la tabla "Real contable frente al ejecutado"
+# y reasignar apuntes. Aqui se comprueba que los indices sobre los que trabaja esa
+# pantalla reproducen exactamente las cifras publicadas y no solapan entre si.
+RPv=D.get('rep') or {}
+if RPv:
+    APv=D['apuntes']
+    _neto=lambda i: round((APv[i][6] or 0)-(APv[i][7] or 0),2)
+    _mes =lambda i: APv[i][1][6:10]+'-'+APv[i][1][3:5]
+    G6v=('60','61','62','63','64','65','66','67','68')
+
+    # 1. las activaciones indexadas reproducen el coste incurrido publicado
+    for c,idx in (RPv.get('act') or {}).items():
+        chk(f'Reparto [{c}]: activaciones indexadas = coste incurrido publicado',
+            round(sum(APv[i][6] or 0 for i in idx),2), round(D['ser'][c]['actAc'][-1],2))
+    _sinAct=[c for c in D['ser'] if round(D['ser'][c]['actAc'][-1],2) and c not in (RPv.get('act') or {})]
+    chk('Reparto: ninguna promocion con coste queda fuera del indice de activaciones',len(_sinAct),0,0,
+        'sin indexar: '+', '.join(_sinAct))
+
+    # 2. el indice de gasto cubre todo el 6xx, sin duplicar ni dejarse apuntes
+    _gidx=[i for v in (RPv.get('gas') or {}).values() for i in v]
+    _greal=[i for i,r in enumerate(APv) if str(r[5])[:2] in G6v]
+    chk('Reparto: apuntes de gasto indexados = apuntes de cuentas 6xx del diario',len(_gidx),len(_greal),0)
+    chk('Reparto: el indice de gasto no repite apuntes',len(set(_gidx)),len(_gidx),0)
+    for c,idx in (RPv.get('gas') or {}).items():
+        _mal=[i for i in idx if APv[i][8]!=c]
+        chk(f'Reparto [{c}]: el indice de gasto respeta la promocion del apunte',len(_mal),0,0)
+
+    # 3. activaciones y gasto son conjuntos disjuntos (nada se cuenta dos veces)
+    _aidx=set(i for v in (RPv.get('act') or {}).values() for i in v)
+    chk('Reparto: ningun apunte esta a la vez en activaciones y en gasto',len(_aidx & set(_gidx)),0,0)
+
+    # 4. la bandeja es exactamente el gasto sin promocion
+    chk('Reparto: la bandeja de candidatos = gasto sin promocion',
+        len(RPv.get('sin') or []), len((RPv.get('gas') or {}).get('SIN_ASIGNAR',[])),0)
+
+    # 5. el coste pendiente de activar es posterior al ultimo cierre activado y suma lo declarado
+    for c,idx in (RPv.get('pend') or {}).items():
+        u=(RPv.get('ultAct') or {}).get(c)
+        chk(f'Reparto [{c}]: importe pendiente de activar',
+            round(sum(_neto(i) for i in idx),2), round((RPv.get('pendImp') or {}).get(c,0),2))
+        chk(f'Reparto [{c}]: todo lo pendiente es posterior a {u}',
+            len([i for i in idx if not (u and _mes(i)>u)]),0,0)
+
+    # 6. el ultimo mes activado que declara el fichero es realmente el ultimo con activacion
+    for c,idx in (RPv.get('act') or {}).items():
+        u=(RPv.get('ultAct') or {}).get(c)
+        _post=[i for i in idx if u and _mes(i)>u and (APv[i][6] or 0)>0]
+        chk(f'Reparto [{c}]: no hay activaciones posteriores al ultimo mes declarado',len(_post),0,0)
+
+    # 7. el ejecutado del estudio que usa la pantalla es el mismo del presupuesto
+    for c,v in (RPv.get('ejec') or {}).items():
+        chk(f'Reparto [{c}]: ejecutado del estudio',round(v,2),round(D['pres'][c]['ejec'],2))
+
 # ================= salida =================
 mal=[r for r in R if not r[0]]
 print('='*104)

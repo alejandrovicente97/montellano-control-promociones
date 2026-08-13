@@ -104,11 +104,11 @@ PROMOS=[
  ('VISTAHERMOSA','Residencial Vistahermosa','Salamanca — Sector 35C Alambres-Vistahermosa, Mz 21','Unifamiliar · 28 uds','Comercialización'),
  ('MIRADOR','Mirador de Vistahermosa','Salamanca — Sector 65 El Zurguen, Parcela B-1','Unifamiliar · 94 uds','Suelo y proyecto'),
  ('LARAD','La Rad','Salamanca — Sector W8 PP Monte de La Rad','Unifamiliar · 64 uds','Suelo y proyecto'),
- ('ISLARUA','Obra Isla Rúa','Salamanca — Isla Rúa','Obra para terceros (Grancampo)','En ejecución'),
+ ('ISLARUA','Obra Isla Rúa','Salamanca — Isla Rúa','Contrata ejecutada para Grancampo','Cerrada y facturada'),
  ('PTE_VILLANUEVA','Puente Villanueva de Perales','Villanueva de Perales','Obra para terceros (Ciresco)','En ejecución'),
- ('SUELO_IND','Doñinos Suelo Industrial','Doñinos de Salamanca','Suelo industrial','Suelo'),
- ('NAVES','Naves de Salamanca','Salamanca','Suelo industrial · proyecto básico','Suelo'),
- ('OFICINAS','Oficinas y mejoras propias','Salamanca (Corrillo, Azafranal)','Inmovilizado propio','—'),
+ ('SUELO_IND','Doñinos Suelo Industrial','Doñinos de Salamanca','Parcela en proyecto, sin licencia ni contrata','En proyecto'),
+ ('NAVES','Naves de Salamanca','Salamanca','Parcela en proyecto, sin licencia ni contrata','En proyecto'),
+ ('OFICINAS','Oficinas y mejoras propias','Salamanca (Corrillo, Azafranal)','Gasto de oficina, no es una promoción','No promocional'),
  ('DONINOS_GRP','Doñinos — común (Puerto + Residencial)','Doñinos de Salamanca','Costes y tesorería compartidos','Bandeja de reparto pendiente'),
  ('SIN_ASIGNAR','Sin asignar / Estructura','—','Gastos de estructura y partidas sin criterio','—'),
 ]
@@ -559,11 +559,11 @@ PROMOS=[
  ('VISTAHERMOSA','Residencial Vistahermosa','Salamanca — Sector 35C Alambres-Vistahermosa, Mz 21','Unifamiliar · 28 uds','Comercialización'),
  ('MIRADOR','Mirador de Vistahermosa','Salamanca — Sector 65 El Zurguen, Parcela B-1','Unifamiliar · 94 uds','Suelo y proyecto'),
  ('LARAD','La Rad','Salamanca — Sector W8 PP Monte de La Rad','Unifamiliar · 64 uds','Suelo y proyecto'),
- ('ISLARUA','Obra Isla Rúa','Salamanca — Isla Rúa','Obra para terceros (Grancampo)','En ejecución'),
+ ('ISLARUA','Obra Isla Rúa','Salamanca — Isla Rúa','Contrata ejecutada para Grancampo','Cerrada y facturada'),
  ('PTE_VILLANUEVA','Puente Villanueva de Perales','Villanueva de Perales','Obra para terceros (Ciresco)','En ejecución'),
- ('SUELO_IND','Doñinos Suelo Industrial','Doñinos de Salamanca','Suelo industrial','Suelo'),
- ('NAVES','Naves de Salamanca','Salamanca','Suelo industrial · proyecto básico','Suelo'),
- ('OFICINAS','Oficinas y mejoras propias','Salamanca (Corrillo, Azafranal)','Inmovilizado propio','—'),
+ ('SUELO_IND','Doñinos Suelo Industrial','Doñinos de Salamanca','Parcela en proyecto, sin licencia ni contrata','En proyecto'),
+ ('NAVES','Naves de Salamanca','Salamanca','Parcela en proyecto, sin licencia ni contrata','En proyecto'),
+ ('OFICINAS','Oficinas y mejoras propias','Salamanca (Corrillo, Azafranal)','Gasto de oficina, no es una promoción','No promocional'),
  ('SIN_ASIGNAR','Sin asignar / Estructura','—','Gastos de estructura y partidas sin criterio','—'),
 ]
 # ---------------- LOGOS DE PROMOCION (opcional) ----------------
@@ -948,6 +948,106 @@ except Exception as e:
     for cod in MOD: MOD[cod]['obraMes']=[]
 DATA['mod'] = MOD
 print('  modelo de promocion incorporado:', len(MOD), 'promociones')
+
+# =====================================================================================
+#  FASE 6 · REPARTO DE COSTE  ·  material para explicar y corregir las diferencias
+#  entre el coste real contable y el ejecutado del estudio economico.
+#
+#  No altera ninguna cifra publicada. Solo construye indices sobre la lista de
+#  apuntes (DATA['apuntes']) para que el cuadro pueda abrir, promocion a promocion:
+#    - las activaciones (33x, 313x, 21000x, 23100x) que forman el Real contable,
+#    - el gasto 6xx imputado a esa promocion, factura a factura,
+#    - el gasto incurrido en meses posteriores al ultimo cierre activado,
+#    - la bandeja de gasto sin promocion, como candidatos a imputar.
+#  Los indices apuntan a la posicion en DATA['apuntes'], que se construye desde M
+#  en el mismo orden, de modo que la correspondencia es exacta.
+# =====================================================================================
+print('\nFASE 6 · reparto de coste')
+REP={}
+try:
+    _M=M.reset_index(drop=True)
+    assert len(_M)==len(AP), 'desalineacion entre M y la lista de apuntes'
+
+    def _pAct(r):
+        """Promocion a la que la contabilidad activa el apunte, si es una activacion."""
+        c=r.cta
+        if c.startswith('33'):
+            return MAP33.get(c) if r.soc=='PUM' else SPV2P.get(r.soc)
+        if c.startswith(('313','21000','23100')):
+            return r.promo
+        return None
+
+    G6=('60','61','62','63','64','65','66','67','68')
+    ACTI={}; GAST={}; SINB=[]
+    actMes={}; gasMes={}
+    for i,r in enumerate(_M.itertuples()):
+        p=_pAct(r)
+        if p is not None:
+            if r.debe and r.debe>0:
+                ACTI.setdefault(p,[]).append(i)
+                actMes[(p,r.mes)]=r2(actMes.get((p,r.mes),0.0)+r.debe)
+        elif r.cta[:2] in G6:
+            GAST.setdefault(r.promo,[]).append(i)
+            gasMes[(r.promo,r.mes)]=r2(gasMes.get((r.promo,r.mes),0.0)+r.neto)
+            if r.promo==SIN: SINB.append(i)
+
+    # ---- ultimo mes con asiento de activacion y coste posterior aun sin activar ----
+    ULTACT={}; PENDI={}; PENDIMP={}
+    for p in PORD:
+        ms=[m for m in MESES if actMes.get((p,m),0)]
+        ULTACT[p]=ms[-1] if ms else None
+        if ULTACT[p] is None: PENDI[p]=[]; PENDIMP[p]=0.0; continue
+        corte=MESES.index(ULTACT[p])
+        post={MESES[k] for k in range(corte+1,NM)}
+        idx=[i for i in GAST.get(p,[]) if _M.at[i,'mes'] in post]
+        PENDI[p]=idx
+        PENDIMP[p]=r2(sum(float(_M.at[i,'neto']) for i in idx))
+
+    # ---- enlace de cada apunte de gasto con el PDF escaneado de su factura ----
+    # Se apoya en el registro de facturas recibidas ya casado por el OCR: si el
+    # asiento contiene la linea de proveedor de una factura con PDF, todas las
+    # lineas de gasto de ese asiento apuntan a ese PDF.
+    PDFAP={}
+    try:
+        _fr={}
+        for _i,_x in enumerate(FRAC):
+            _ruta=_x[11] if len(_x)>11 else None
+            if _ruta: _fr[(_x[0],_x[3],round(float(_x[4]),2))]=_ruta
+        if _fr:
+            _prov=_M[_M.cta.str.startswith(('400','410','411'))]
+            _key={}
+            for r in _prov.itertuples():
+                k=(r.cta,r.fecha.strftime('%d/%m/%Y'),round(float(r.haber),2))
+                if k in _fr: _key[(r.soc,int(r.asiento))]=_fr[k]
+            if _key:
+                for i,r in enumerate(_M.itertuples()):
+                    if r.cta[:2] in G6:
+                        v=_key.get((r.soc,int(r.asiento)))
+                        if v: PDFAP[i]=v
+        print('  apuntes de gasto con factura escaneada:',len(PDFAP))
+    except Exception as e:
+        print('  aviso: no se pudo enlazar el PDF a los apuntes de gasto:',e)
+
+    REP=dict(
+      act={p:v for p,v in ACTI.items()},
+      gas={p:v for p,v in GAST.items()},
+      sin=SINB,
+      ultAct=ULTACT,
+      pend={p:v for p,v in PENDI.items() if v},
+      pendImp={p:v for p,v in PENDIMP.items() if abs(v)>0.005},
+      pdf=PDFAP,
+      map33=MAP33, spv2p=SPV2P,
+      ejec={p:(PRES.get(p,{}) or {}).get('ejec') for p in PORD if (PRES.get(p,{}) or {}).get('ejec')},
+    )
+    print('  activaciones indexadas :',sum(len(v) for v in ACTI.values()))
+    print('  gasto indexado         :',sum(len(v) for v in GAST.values()))
+    print('  bandeja sin promocion  :',len(SINB))
+    for p in [x for x in PORD if PENDIMP.get(x)]:
+        print(f'    {p:14s} ultimo activado {ULTACT[p]}  coste posterior sin activar {PENDIMP[p]:>14,.2f}')
+except Exception as e:
+    print('  aviso: no se pudo construir el reparto de coste:',e)
+    REP={}
+DATA['rep']=REP
 
 json.dump(DATA, open(os.path.join(OUT,'DATA.json'),'w',encoding='utf-8'), ensure_ascii=False, separators=(',',':'))
 print('DATA.json',os.path.getsize(os.path.join(OUT,'DATA.json'))//1024,'KB')
