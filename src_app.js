@@ -1813,30 +1813,38 @@ function concDetalle(cod,t){
 }
 function concPanel(cod){
   const f=concFilas(cod), tot=f.reduce((a,x)=>a+x[1].imp,0);
-  const filas=[];
+  const cm=(DATA.ana?.cmp||[]).find(x=>x.cod===cod)||{base:0,ana:0,spv:0,apert:0,julio:0};
+  const nc=(cm.spv||0)+(cm.apert||0)+(cm.julio||0);
+  /* Nombres en castellano llano: el puente arranca en mi cifra y aterriza en la suya. */
+  const NOM={reparto:'Facturas que ella coloca en otra obra',
+             importe:'Facturas donde el importe no coincide',
+             solo_uno:'Facturas que solo tiene uno de los dos',
+             activacion:'Suelo y regularizaciones que entran sin factura'};
+  const filas=[{cls:'tot',c:[
+    {v:'<b>Lo que sale de la contabilidad</b><div class="muted small">Leyendo los diarios factura a factura</div>',cls:'l'},
+    {v:eur(cm.base)}]}];
+  if(Math.abs(nc)>0.5) filas.push({c:[
+    {v:'Movimientos que su fichero no recoge<div class="muted small">'+
+      [cm.spv?'sociedad vehículo '+eur(cm.spv):'',cm.apert?'asiento de apertura '+eur(cm.apert):'',
+       cm.julio?'julio, posterior a su corte '+eur(cm.julio):''].filter(Boolean).join(' · ')+'</div>',cls:'l'},
+    {v:eur(nc),cls:'muted'}]});
   f.forEach(([t,v])=>{
     const ab=RPS.cap==='C:'+t;
     filas.push({cls:'clk clkc'+(ab?' sel':''),attr:`data-c="C:${t}"`,c:[
-      {v:`<b>${esc((CTIP[t]||[t])[0])}</b> <span class="muted small">${nf0.format(v.n)} partidas</span> <span class="lupa">${ab?'▾':'▸'}</span>`},
-      {v:eur(v.imp),cls:Math.abs(v.imp)>100000?'neg':(Math.abs(v.imp)>20000?'wrn':'')}]});
+      {v:`${esc(NOM[t]||t)} <span class="muted small">${nf0.format(v.n)} facturas</span> <span class="lupa">${ab?'▾':'▸ ver cuáles'}</span>`,cls:'l'},
+      {v:eur(-v.imp),cls:Math.abs(v.imp)>100000?'neg':(Math.abs(v.imp)>20000?'wrn':'')}]});
     if(ab) filas.push({raw:`<td class="expand2 l" colspan="2"><div class="expwrap2">
       ${(CTIP[t]||['',''])[1]?`<div class="legend" style="margin:0 0 9px">${(CTIP[t]||['',''])[1]}</div>`:''}
       ${concDetalle(cod,t)}</div></td>`});
   });
-  filas.push({cls:'tot',c:[{v:'<b>Diferencia total entre mi reparto y la analítica</b>'},{v:eur(tot)}]});
-  const cm=(DATA.ana?.cmp||[]).find(x=>x.cod===cod)||{};
-  const nc=(cm.spv||0)+(cm.apert||0)+(cm.julio||0);
-  if(Math.abs(nc)>0.5){
-    filas.push({c:[{v:'De la cual no es comparable con la analítica<div class="muted small">'+
-      [cm.spv?'sociedad vehículo '+eur(cm.spv):'',cm.apert?'asiento de apertura '+eur(cm.apert):'',
-       cm.julio?'movimientos de julio, posteriores a su corte '+eur(cm.julio):''].filter(Boolean).join(' · ')+'</div>',cls:'l'},
-      {v:eur(nc),cls:'muted'}]});
-    filas.push({cls:'tot',c:[{v:'<b>Diferencia comparable</b> <span class="muted small">la que muestra la tabla</span>'},{v:eur(tot-nc)}]});
-  }
+  filas.push({cls:'tot',c:[{v:'<b>Lo que dice la analítica</b>',cls:'l'},{v:eur(cm.ana)}]});
+  const ctrl=(cm.base||0)+nc-tot;
   return `<div class="expwrap">
-    <div style="font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:11px">De qué se compone la diferencia de ${esc(PMAP[cod]?.nom||cod)}</div>
+    <div style="font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:4px">De mi cifra a la suya, paso a paso</div>
+    <div class="legend" style="margin:0 0 12px">Se parte del coste que la contabilidad imputa a ${esc(PMAP[cod]?.nom||cod)} y se van sumando y restando los motivos hasta llegar exactamente a la cifra de la analítica.</div>
+    ${Math.abs(ctrl-(cm.ana||0))>0.05?`<div class="alert bad"><b>Aviso.</b> El puente no cierra por ${eur(ctrl-(cm.ana||0))}.</div>`:''}
     ${tbl([{t:'Concepto',l:1},{t:'Importe'}],filas)}
-    <div class="legend">Estas partidas suman <b>exactamente</b> la diferencia entre mi reparto y la analítica: no queda residuo ni hay nada que dar por bueno a mano. Pincha cualquier línea para ver las facturas concretas y cómo las reparte cada uno.</div>
+    <div class="legend">Las líneas intermedias suman <b>exactamente</b> la diferencia entre las dos cifras: no queda residuo. Pincha cualquiera para ver las facturas concretas, cómo las reparte cada uno y cambiar la obra si alguna está mal imputada.</div>
   </div>`;
 }
 /* ============================== CALIDAD DE DATOS ============================== */
