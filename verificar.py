@@ -236,6 +236,39 @@ if RPv:
     for c,v in (RPv.get('ejec') or {}).items():
         chk(f'Reparto [{c}]: ejecutado del estudio',round(v,2),round(D['pres'][c]['ejec'],2))
 
+    # 8. el cuadre por capitulo cierra: la columna contable suma el coste incurrido
+    #    publicado y la columna del estudio suma el ejecutado, sin residuo
+    CAPv=RPv.get('cap') or {}
+    RESv=RPv.get('resid') or {}
+    ESTv=RPv.get('est') or {}
+    def _cap(i): return CAPv.get(str(i)) or CAPv.get(i)
+    for c in (RPv.get('ejec') or {}):
+        con=0.0
+        for i in (RPv.get('act') or {}).get(c,[]):
+            if _cap(i): con+=APv[i][6] or 0
+        for i in (RPv.get('gas') or {}).get(c,[]):
+            if _cap(i): con+=_neto(i)
+        con=round(con+RESv.get(c,0.0),2)
+        chk(f'Cuadre [{c}]: columna contable = coste incurrido publicado',
+            con, round(D['ser'][c]['actAc'][-1],2))
+        chk(f'Cuadre [{c}]: columna del estudio = ejecutado del estudio',
+            round(sum((ESTv.get(c) or {}).values()),2), round(D['pres'][c]['ejec'],2))
+
+    # 9. todo apunte de gasto tiene capitulo, y ningun capitulo es inventado
+    _sincap=[i for v in (RPv.get('gas') or {}).values() for i in v if not _cap(i)]
+    chk('Cuadre: ningun apunte de gasto se queda sin capitulo',len(_sincap),0,0)
+    _val=set(RPv.get('caps') or [])
+    _raros=sorted({_cap(i) for v in (RPv.get('gas') or {}).values() for i in v if _cap(i)}-_val)
+    chk('Cuadre: los capitulos usados estan en la lista declarada',len(_raros),0,0,
+        'fuera de lista: '+', '.join(map(str,_raros)))
+
+    # 10. el residuo es exactamente lo que el contable activa de mas sobre el gasto
+    for c,v in RESv.items():
+        a=sum(APv[i][6] or 0 for i in (RPv.get('act') or {}).get(c,[]))
+        dr=sum(APv[i][6] or 0 for i in (RPv.get('act') or {}).get(c,[]) if not str(APv[i][5]).startswith('33'))
+        g=sum(_neto(i) for i in (RPv.get('gas') or {}).get(c,[]))
+        chk(f'Cuadre [{c}]: residuo de activacion sobre gasto',round(v,2),round(a-dr-g,2))
+
 # ================= salida =================
 mal=[r for r in R if not r[0]]
 print('='*104)

@@ -1028,6 +1028,82 @@ try:
     except Exception as e:
         print('  aviso: no se pudo enlazar el PDF a los apuntes de gasto:',e)
 
+    # ---- proveedor de cada apunte de gasto, leido de la linea de tercero del asiento ----
+    PROVAP={}
+    try:
+        _t=_M[_M.cta.str.startswith(('400','410','411'))]
+        _nom={}
+        for r in _t.itertuples():
+            k=(r.soc,int(r.asiento)); v=(r.descripcion or r.comentario or '').strip()
+            if v and k not in _nom: _nom[k]=v[:46]
+        for i,r in enumerate(_M.itertuples()):
+            if r.cta[:2] in G6:
+                v=_nom.get((r.soc,int(r.asiento)))
+                if v: PROVAP[i]=v
+    except Exception as e:
+        print('  aviso: no se pudo identificar el proveedor de los apuntes:',e)
+
+    # ---- clasificacion por capitulo del estudio economico ----------------------------
+    # El estudio reparte el coste ejecutado en capitulos. La contabilidad lo reparte por
+    # cuenta. Para poder cuadrar una columna contra otra se clasifica cada apunte en el
+    # capitulo equivalente: por cuenta cuando la cuenta ya lo identifica, y por proveedor
+    # cuando cae en una cuenta 606 de obra, que en esta contabilidad recoge tambien suelo,
+    # honorarios y comercializacion. La clasificacion es un punto de partida revisable
+    # desde el propio cuadro; no altera ninguna cifra, solo agrupa.
+    CAPS=['Suelo','Obra','Tasas e impuestos','Honorarios técnicos','Acometidas','Comercial',
+          'Jurídicos','Seguros y avales','Financieros','Imprevistos y costes extra',
+          'Estructura','Otros']
+    KWCAP=[('Suelo',r'LANDCOMPANY|SOLAR|TERRENO|PARCELA|COMPRAVENTA|FINCA'),
+           ('Honorarios técnicos',r'ARQUITECT|INGENIER|APAREJAD|TOPOGRAF|GEOTECN|OCT\b|CONTROL TECNICO|EUROVALORACIONES|METRO DISE|ESTUDIO TECNICO|PROYECTO'),
+           ('Comercial',r'ADEVINTA|IDEALISTA|FOTOCASA|PUBLICID|MARKETING|PERSUADIS|INMOBILIARI|ROTUL'),
+           ('Jurídicos',r'NOTARI|REGISTRO DE LA PROPIEDAD|ABOGAD|GESTORIA|PROCURAD|ASESOR'),
+           ('Seguros y avales',r'SEGURO|MAPFRE|ASEGURAD|AVAL'),
+           ('Acometidas',r'IBERDROLA|ENDESA|AQUALIA|ACOMETIDA|NATURGY|UNION FENOSA|AGUAS DE')]
+    def _capCta(c):
+        if c.startswith(('313','21000','23100')): return 'Suelo'
+        if c.startswith('606'): return None                 # decide el proveedor
+        if c.startswith(('630','631')): return 'Tasas e impuestos'
+        if c.startswith('623'): return 'Honorarios técnicos'
+        if c.startswith('628'): return 'Acometidas'
+        if c.startswith('627'): return 'Comercial'
+        if c.startswith('625'): return 'Seguros y avales'
+        if c.startswith('6623'): return 'Seguros y avales'
+        if c.startswith(('660','661','662','665','668','669')): return 'Financieros'
+        if c.startswith(('620','621','622','624','626','629','640','641','642','643','649')): return 'Estructura'
+        return 'Otros'
+    def _capProv(nom):
+        for cap,rx in KWCAP:
+            if _re.search(rx,nom or '',_re.I): return cap
+        return 'Obra'
+    CAPAP={}
+    for i,r in enumerate(_M.itertuples()):
+        c=r.cta
+        if c.startswith(('313','21000','23100')) and r.debe and r.debe>0 and _pAct(r) is not None:
+            CAPAP[i]='Suelo'
+        elif c[:2] in G6:
+            cp=_capCta(c)
+            CAPAP[i]=cp if cp else _capProv(PROVAP.get(i,''))
+
+    # ---- residuo: coste incorporado a existencias sin factura ni compra asociada ------
+    # La activacion mensual la fija el contable contra la cuenta 71x, y no tiene por que
+    # coincidir con el gasto 6xx del periodo: la diferencia son aportaciones de suelo y
+    # regularizaciones que entran directamente en la 33x. Se aisla para que el cuadre
+    # cierre al centimo.
+    RESID={}
+    for p in PORD:
+        a=sum(float(_M.at[i,'debe'] or 0) for i in ACTI.get(p,[]))
+        dr=sum(float(_M.at[i,'debe'] or 0) for i in ACTI.get(p,[]) if not _M.at[i,'cta'].startswith('33'))
+        g=sum(float(_M.at[i,'neto']) for i in GAST.get(p,[]))
+        v=r2(a-dr-g)
+        if abs(v)>0.005: RESID[p]=v
+
+    EST={}
+    for p,v in PRES.items():
+        e={}
+        for c in (v.get('caps') or []):
+            if abs(c.get('ejec') or 0)>0.005: e[c['cap']]=r2(c['ejec'])
+        EST[p]=e
+
     REP=dict(
       act={p:v for p,v in ACTI.items()},
       gas={p:v for p,v in GAST.items()},
@@ -1035,7 +1111,8 @@ try:
       ultAct=ULTACT,
       pend={p:v for p,v in PENDI.items() if v},
       pendImp={p:v for p,v in PENDIMP.items() if abs(v)>0.005},
-      pdf=PDFAP,
+      pdf=PDFAP, prov=PROVAP, cap=CAPAP, caps=CAPS, resid=RESID, est=EST,
+      residNom='Suelo y regularizaciones aportados directamente a existencias',
       map33=MAP33, spv2p=SPV2P,
       ejec={p:(PRES.get(p,{}) or {}).get('ejec') for p in PORD if (PRES.get(p,{}) or {}).get('ejec')},
     )

@@ -141,6 +141,19 @@ td.expand{padding:0!important;background:#f7f9fc;box-shadow:inset 3px 0 0 var(--
 .pback .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink3);font-weight:600}
 .pback .v{font-size:15px;font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums;margin-top:3px}
 .pback .d{font-size:10.8px;color:var(--ink3);margin-top:2px}
+td.expand2{padding:0!important;background:#fff;box-shadow:inset 3px 0 0 var(--navy3)}
+.expwrap2{padding:12px 14px 4px}
+.expwrap2 .scroll{max-height:330px}
+/* la celda desplegada no debe ensanchar la tabla que la contiene: se limita a cero y
+   el contenido de dentro se desplaza en horizontal si hiciera falta */
+td.expand,td.expand2{max-width:0}
+.expwrap,.expwrap2{overflow-x:auto}
+.expwrap2 table td:nth-child(3),.expwrap table td:nth-child(3){white-space:normal;min-width:260px;max-width:430px}
+.expwrap2 table td:nth-child(4),.expwrap table td:nth-child(4){white-space:normal;max-width:230px}
+tr.ok td{color:var(--ink3)}
+tr.ok td:first-child{box-shadow:inset 3px 0 0 var(--ok)}
+button.tick{padding:3px 10px;font-size:11px;font-weight:600;white-space:nowrap}
+button.tick.on{background:#e6f4ec;border-color:#9ccbb2;color:#12653c}
 .rtabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:13px}
 .rtab{padding:7px 13px;font-size:12.2px;font-weight:600;color:var(--ink3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .rtab:hover{color:var(--navy)}

@@ -1494,7 +1494,13 @@ function cProy(){
 const RP=DATA.rep||{};
 const APU=DATA.apuntes||[];
 /* apunte: 0 soc 1 fecha 2 asiento 3 concepto 4 descripcion 5 cuenta 6 debe 7 haber 8 promo 9 naturaleza 10 ejercicio */
-const RPS={sel:null, ov:{}, vista:'pen', q:'', tope:120};
+const RPS={sel:null, ov:{}, ovc:{}, ok:{}, cap:null, vista:'cuadre', q:'', tope:120};
+const RESN=RP.residNom||'Suelo y regularizaciones aportados directamente a existencias';
+const CAPS=(RP.caps||[]).concat([RESN]);
+const capDe=(i,base)=>(RPS.ovc[i]!==undefined?RPS.ovc[i]:base);
+const capBase=i=>(RP.cap||{})[i]||'Otros';
+const nOvc=()=>Object.keys(RPS.ovc).length;
+const okKey=(cod,cap)=>cod+'|'+cap;
 
 const apDebe=i=>APU[i][6]||0;
 const apNeto=i=>(APU[i][6]||0)-(APU[i][7]||0);
@@ -1505,15 +1511,40 @@ const nOv=()=>Object.keys(RPS.ov).length;
 
 /* ---- recalculo completo teniendo en cuenta las reasignaciones en pantalla ---- */
 function repCalc(){
-  const real={},pend={},gas={},nGas={};
+  const real={},pend={},gas={},nGas={},cap={},idx={};
   const act=RP.act||{}, gg=RP.gas||{}, ua=RP.ultAct||{};
-  for(const p in act) for(const i of act[p]){const d=destino(i,p); real[d]=(real[d]||0)+apDebe(i);}
+  const add=(d,c,v,i)=>{(cap[d]=cap[d]||{})[c]=(cap[d][c]||0)+v;
+                        ((idx[d]=idx[d]||{})[c]=idx[d][c]||[]).push(i);};
+  for(const p in act) for(const i of act[p]){
+    const d=destino(i,p), v=apDebe(i); real[d]=(real[d]||0)+v;
+    const c=(RP.cap||{})[i]; if(c) add(d,capDe(i,c),v,i);
+  }
   for(const p in gg)  for(const i of gg[p]){
     const d=destino(i,p), v=apNeto(i);
     gas[d]=(gas[d]||0)+v; nGas[d]=(nGas[d]||0)+1;
+    add(d,capDe(i,capBase(i)),v,i);
     const u=ua[d]; if(u&&apMes(i)>u) pend[d]=(pend[d]||0)+v;
   }
-  return {real,pend,gas,nGas};
+  /* el residuo de cada promoción no procede de ningún apunte: es la diferencia entre lo
+     que el contable activa contra la 71x y el gasto del periodo. Va en su propia línea. */
+  for(const p in (RP.resid||{})){const v=RP.resid[p]; if(v){(cap[p]=cap[p]||{})[RESN]=(cap[p][RESN]||0)+v;}}
+  return {real,pend,gas,nGas,cap,idx};
+}
+
+/* ---- cuadre por capítulo: cierra siempre contra Real contable y Ejecutado ---- */
+function repFilas(cod,c){
+  const con=c.cap[cod]||{}, est=(RP.est||{})[cod]||{};
+  const nom=new Set(CAPS.concat(Object.keys(con)).concat(Object.keys(est)));
+  const o=[];
+  nom.forEach(k=>{const a=con[k]||0, b=est[k]||0;
+    if(Math.abs(a)<0.005&&Math.abs(b)<0.005) return;
+    o.push({cap:k,con:a,est:b,dif:a-b,n:((c.idx[cod]||{})[k]||[]).length,ok:!!RPS.ok[okKey(cod,k)]});});
+  o.sort((x,y)=>Math.abs(y.dif)-Math.abs(x.dif));
+  return o;
+}
+/* diferencia que queda sin dar por buena: es lo que el usuario lleva a cero */
+function repPorExplicar(cod,c){
+  return repFilas(cod,c).filter(f=>!f.ok).reduce((a,f)=>a+f.dif,0);
 }
 
 /* ---- desplegable de obra para un apunte ---- */
@@ -1535,20 +1566,64 @@ function repTabla(idx,base,opt){
   const n=f.length, corte=f.slice(0,RPS.tope);
   const filas=corte.map(i=>{const r=APU[i], b=opt.base||r[8], mod=destino(i,b)!==b;
     const txt=esc(r[3])+(r[4]&&r[4]!==r[3]?'<div class="muted small">'+esc(r[4])+'</div>':'');
-    return {cls:mod?'mod':'',c:[
-      {v:r[1]},
+    const pv=(RP.prov||{})[i];
+    const cc=[{v:r[1]},
       {v:'<span class="pill">'+esc(r[5])+'</span>'},
       {v:apPdf(i)?pdfLink(apPdf(i),txt):txt,cls:'l'},
-      {v:esc(SOCN[r[0]]||r[0]),cls:'l'},
-      {v:eur(opt.debe?apDebe(i):apNeto(i))},
-      {v:oSel(i,b),cls:'l'}]};});
-  const t=tbl([{t:'Fecha'},{t:'Cuenta',l:1},{t:'Concepto',l:1},{t:'Sociedad',l:1},{t:'Importe'},{t:'Obra imputada',l:1}],filas);
+      {v:esc(pv||SOCN[r[0]]||r[0]),cls:'l'},
+      {v:eur(opt.debe?apDebe(i):apNeto(i))}];
+    if(opt.cap) cc.push({v:cSel(i),cls:'l'});
+    cc.push({v:oSel(i,b),cls:'l'});
+    return {cls:(mod||(opt.cap&&capDe(i,capBase(i))!==capBase(i)))?'mod':'',c:cc};});
+  const cab=[{t:'Fecha'},{t:'Cuenta',l:1},{t:'Concepto',l:1},{t:opt.cap?'Proveedor':'Sociedad',l:1},{t:'Importe'}];
+  if(opt.cap) cab.push({t:'Capítulo',l:1});
+  cab.push({t:'Obra imputada',l:1});
+  const t=tbl(cab,filas);
   const tot=f.reduce((a,i)=>a+(opt.debe?apDebe(i):apNeto(i)),0);
   const pie=n>corte.length
     ? `<div class="legend">Se muestran los ${nf0.format(corte.length)} apuntes de mayor importe de ${nf0.format(n)}, que suman ${eur(tot)}. Acota con el buscador o <button class="btn" id="rpMas" style="padding:3px 9px;font-size:11.2px">ver ${nf0.format(Math.min(500,n-corte.length))} más</button></div>`
     : (n?`<div class="legend">${nf0.format(n)} apuntes, ${eur(tot)} en total.</div>`
         :`<div class="legend">No hay apuntes que cumplan el filtro.</div>`);
   return `<div class="scroll">${t}</div>${pie}`;
+}
+
+/* ---- selector de capítulo para un apunte ---- */
+function cSel(i){
+  const b=capBase(i), d=capDe(i,b), mod=d!==b;
+  const op=CAPS.filter(x=>x!==RESN).map(x=>`<option value="${esc(x)}"${x===d?' selected':''}>${esc(x)}</option>`).join('');
+  return `<select class="csel${mod?' mod':''}" data-i="${i}" data-base="${esc(b)}" title="${mod?'Reclasificado desde '+esc(b):'Capítulo propuesto por la cuenta y el proveedor'}">${op}</select>`;
+}
+
+/* ---- cuadre por capítulo, con desglose de facturas al pinchar cada línea ---- */
+function repCuadre(cod,c){
+  const f=repFilas(cod,c);
+  const tc=f.reduce((a,x)=>a+x.con,0), te=f.reduce((a,x)=>a+x.est,0);
+  const pe=repPorExplicar(cod,c);
+  const filas=[];
+  f.forEach(x=>{
+    const ab=RPS.cap===x.cap, cl=(x.ok?'ok ':'')+(ab?'sel ':'')+'clk clkc';
+    filas.push({cls:cl,attr:`data-c="${esc(x.cap)}"`,c:[
+      {v:`<b>${esc(x.cap)}</b>${x.n?` <span class="muted small">${nf0.format(x.n)} apuntes</span>`:''} <span class="lupa">${ab?'▾':'▸'}</span>`},
+      {v:eur(x.con)},{v:eur(x.est)},
+      {v:eur(x.dif),cls:x.ok?'muted':(Math.abs(x.dif)>100000?'neg':(Math.abs(x.dif)>20000?'wrn':''))},
+      {v:x.est?pct1(100*x.dif/x.est):'—',cls:x.ok?'muted':''},
+      {v:`<button class="btn tick${x.ok?' on':''}" data-ok="${esc(x.cap)}">${x.ok?'✓ explicado':'marcar explicado'}</button>`,cls:'l'}]});
+    if(ab){
+      const ii=(c.idx[cod]||{})[x.cap]||[];
+      const cuerpo=ii.length
+        ? repTabla(ii,cod,{cap:1})
+        : `<div class="legend">Esta línea no procede de apuntes individuales: ${x.cap===RESN
+            ? 'es la diferencia entre lo que el contable activa cada mes contra la cuenta 71x y el gasto de proveedor del periodo, es decir suelo y regularizaciones que entran directamente en existencias.'
+            : 'solo tiene importe en el estudio, la contabilidad no recoge nada en este concepto.'}</div>`;
+      filas.push({raw:`<td class="expand2 l" colspan="6"><div class="expwrap2">${cuerpo}</div></td>`});
+    }
+  });
+  filas.push({cls:'tot',c:[{v:'<b>Total</b>'},{v:eur(tc)},{v:eur(te)},{v:eur(tc-te)},
+    {v:te?pct1(100*(tc-te)/te):'—'},{v:''}]});
+  const t=tbl([{t:'Capítulo',l:1},{t:'Contabilidad'},{t:'Estudio / analítica'},{t:'Diferencia'},{t:'%'},{t:'',l:1}],filas);
+  return `${t}
+   <div class="legend">La columna <i>Contabilidad</i> suma exactamente el Real contable de la promoción y la columna <i>Estudio</i> el ejecutado, de modo que la diferencia queda repartida al céntimo entre estas líneas: no hay residuo.
+   Pincha una línea para ver las facturas que la componen y, si alguna está en el capítulo equivocado, cámbiala en el desplegable. Cuando una línea ya esté entendida, márcala como explicada y dejará de contar en <b>Por explicar</b>, que ahora mismo es ${eur(pe)}.</div>`;
 }
 
 /* ---- puente de la diferencia ---- */
@@ -1586,15 +1661,17 @@ function repPanel(cod,c){
   const traidos=Object.keys(RPS.ov).map(Number).filter(i=>RPS.ov[i]===cod&&APU[i][8]!==cod);
   const real=c.real[cod]||0, pend=c.pend[cod]||0, ej=(RP.ejec||{})[cod];
   const dif=ej!=null?real-ej:null, dif2=ej!=null?real+pend-ej:null;
+  const fl=repFilas(cod,c), pex=repPorExplicar(cod,c), nCap=fl.length, nOk=fl.filter(x=>x.ok).length;
 
   /* resumen en tarjetas: de qué se compone la diferencia de esta promoción */
   const cab=`<div class="pback">
     <div><div class="l">Diferencia a explicar</div><div class="v ${dif!=null&&Math.abs(dif)>150000?'neg':''}">${eur(dif)}</div><div class="d">Real contable menos ejecutado del estudio</div></div>
-    <div><div class="l">Facturas sin activar</div><div class="v ${pend?'wrn':''}">${eur(pend)}</div><div class="d">${nf0.format(iPen.length)} facturas posteriores al último cierre activado</div></div>
-    <div><div class="l">Queda por explicar</div><div class="v ${dif2!=null&&Math.abs(dif2)>150000?'neg':'pos'}">${eur(dif2)}</div><div class="d">Una vez incorporadas esas facturas</div></div>
+    <div><div class="l">Facturas aún sin activar</div><div class="v ${pend?'wrn':''}">${eur(pend)}</div><div class="d">${nf0.format(iPen.length)} facturas posteriores al último cierre activado</div></div>
+    <div><div class="l">Queda por explicar</div><div class="v ${Math.abs(pex)>150000?'neg':(Math.abs(pex)>1?'wrn':'pos')}">${eur(pex)}</div><div class="d">${nOk} de ${nCap} líneas del cuadre dadas por explicadas</div></div>
    </div>`;
 
-  const V=[['pen','Facturas que explican la diferencia',iPen.length],
+  const V=[['cuadre','Cuadre con el estudio',null],
+           ['pen','Facturas aún sin activar',iPen.length],
            ['gas','Todas las facturas imputadas',iGas.length],
            ['act','Asientos que forman el Real contable',iAct.length],
            ['sin','Facturas sin obra asignada',iSin.length],
@@ -1602,7 +1679,8 @@ function repPanel(cod,c){
   const tabs=V.filter(v=>v[2]===null||v[2]>0).map(v=>
     `<div class="rtab ${RPS.vista===v[0]?'on':''}" data-v="${v[0]}">${v[1]}${v[2]!=null?`<span class="n">${nf0.format(v[2])}</span>`:''}</div>`).join('');
   let cuerpo='';
-  if(RPS.vista==='puente') cuerpo=repPuente(cod,c);
+  if(RPS.vista==='cuadre') cuerpo=repCuadre(cod,c);
+  else if(RPS.vista==='puente') cuerpo=repPuente(cod,c);
   else if(RPS.vista==='act') cuerpo=repTabla(iAct,cod,{debe:1,base:cod})
     +`<div class="legend">Estos son los asientos de variación de existencias que forman literalmente el <b>Real contable</b> de la promoción. No son facturas: cada uno agrupa el coste de un mes entero. Cambiar la obra de cualquiera de ellos mueve la cifra al momento, aquí y en la tabla de arriba.</div>`;
   else if(RPS.vista==='gas') cuerpo=repTabla(iGas.concat(traidos),cod)
@@ -1611,9 +1689,9 @@ function repPanel(cod,c){
     +(iPen.length?`<div class="legend">Estas son las facturas que justifican la diferencia por el lado contable: están contabilizadas pero son posteriores al último asiento de variación de existencias, así que todavía no forman parte del coste de la obra. Al cambiar la obra de cualquiera de ellas, las tres tarjetas de arriba y la tabla se recalculan al momento.</div>`:'');
   else if(RPS.vista==='sin') cuerpo=repTabla(iSin,'SIN_ASIGNAR')
     +`<div class="legend">Gasto que hoy no está imputado a ninguna promoción: estructura, personal, tributos generales, servicios centrales e intereses del grupo. Si alguno corresponde en realidad a esta obra, elígela en el desplegable y quedará recogido en el fichero de reasignaciones.</div>`;
-  const acc=[`<button class="btn pri" id="rpExp"${nOv()?'':' disabled'}>Descargar reasignaciones${nOv()?' ('+nOv()+')':''}</button>`,
-             `<button class="btn" id="rpCsv"${nOv()?'':' disabled'}>Descargar en CSV</button>`,
-             `<button class="btn" id="rpDes"${nOv()?'':' disabled'}>Deshacer todo</button>`,
+  const acc=[`<button class="btn pri" id="rpExp"${(nOv()||nOvc())?'':' disabled'}>Descargar reasignaciones${(nOv()+nOvc())?' ('+(nOv()+nOvc())+')':''}</button>`,
+             `<button class="btn" id="rpCsv"${(nOv()||nOvc())?'':' disabled'}>Descargar en CSV</button>`,
+             `<button class="btn" id="rpDes"${(nOv()||nOvc())?'':' disabled'}>Deshacer todo</button>`,
              `<button class="btn" id="rpCerrar">Cerrar</button>`].join('');
   return `<div class="expwrap">
     <div style="font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:11px">Facturas y asientos que explican la diferencia de ${esc(nom)}</div>
@@ -1630,11 +1708,23 @@ function repPanel(cod,c){
 
 /* ---- descarga de las decisiones ---- */
 function repDatos(){
-  return Object.keys(RPS.ov).map(Number).sort((a,b)=>a-b).map(i=>{const r=APU[i];
+  const ks=new Set(Object.keys(RPS.ov).concat(Object.keys(RPS.ovc)).map(Number));
+  return [...ks].sort((a,b)=>a-b).map(i=>{const r=APU[i], o=RPS.ov[i], c=RPS.ovc[i];
     return {apunte:i, sociedad:r[0], fecha:r[1], asiento:r[2], cuenta:r[5], concepto:r[3], descripcion:r[4],
-            importe:apNeto(i), debe:r[6], haber:r[7], naturaleza:r[9], ejercicio:r[10],
-            obra_contabilidad:r[8], obra_asignada:RPS.ov[i],
-            obra_contabilidad_nom:PMAP[r[8]]?.nom||r[8], obra_asignada_nom:PMAP[RPS.ov[i]]?.nom||RPS.ov[i]};});
+            proveedor:(RP.prov||{})[i]||'', importe:apNeto(i), debe:r[6], haber:r[7],
+            naturaleza:r[9], ejercicio:r[10],
+            obra_contabilidad:r[8], obra_asignada:o!==undefined?o:'',
+            obra_contabilidad_nom:PMAP[r[8]]?.nom||r[8], obra_asignada_nom:o!==undefined?(PMAP[o]?.nom||o):'',
+            capitulo_propuesto:capBase(i), capitulo_asignado:c!==undefined?c:''};});
+}
+/* estado del cuadre: que lineas se han dado por explicadas y con que diferencia */
+function repCuadreDatos(){
+  const c=repCalc(), o=[];
+  P_REAL.filter(p=>p.pres).forEach(p=>repFilas(p.cod,c).forEach(f=>o.push({
+    promocion:p.cod, promocion_nom:p.nom, capitulo:f.cap,
+    contabilidad:+f.con.toFixed(2), estudio:+f.est.toFixed(2), diferencia:+f.dif.toFixed(2),
+    apuntes:f.n, explicado:f.ok?'si':'no'})));
+  return o;
 }
 function repBaja(nombre,texto,tipo){
   const b=new Blob([texto],{type:tipo+';charset=utf-8'}), u=URL.createObjectURL(b);
@@ -1646,13 +1736,13 @@ function repExporta(){
   const j={generado:new Date().toISOString().slice(0,19).replace('T',' '),
            origen:'Cuadro de control de promociones · Promociones Urbanas Montellano, S.L.',
            cierre:DATA.meta.ultimo, datos:DATA.meta.generado||null, n:d.length,
-           nota:'Cada linea reasigna un apunte del diario a otra obra. El campo apunte es la posicion en la lista de apuntes del fichero de datos con el que se genero este cuadro; sociedad, fecha, asiento y cuenta lo identifican de forma univoca en la contabilidad.',
-           reasignaciones:d};
+           nota:'Cada linea reasigna un apunte del diario a otra obra, a otro capitulo del estudio, o a las dos cosas. El campo apunte es la posicion en la lista de apuntes del fichero de datos con el que se genero este cuadro; sociedad, fecha, asiento y cuenta lo identifican de forma univoca en la contabilidad. Un campo asignado vacio significa que ese aspecto no se ha tocado.',
+           reasignaciones:d, cuadre:repCuadreDatos()};
   repBaja('reasignaciones-coste-'+(DATA.meta.ultimo||'').replace(/\//g,'-')+'.json',JSON.stringify(j,null,1),'application/json');
 }
 function repExportaCsv(){
   const d=repDatos();
-  const col=['apunte','sociedad','fecha','asiento','cuenta','concepto','descripcion','importe','naturaleza','ejercicio','obra_contabilidad','obra_contabilidad_nom','obra_asignada','obra_asignada_nom'];
+  const col=['apunte','sociedad','fecha','asiento','cuenta','concepto','descripcion','proveedor','importe','naturaleza','ejercicio','obra_contabilidad','obra_contabilidad_nom','obra_asignada','obra_asignada_nom','capitulo_propuesto','capitulo_asignado'];
   const esc2=v=>{const s=String(v==null?'':v); return /[";\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
   const txt='﻿'+col.join(';')+'\n'+d.map(r=>col.map(k=>esc2(k==='importe'?String(r[k]).replace('.',','):r[k])).join(';')).join('\n');
   repBaja('reasignaciones-coste-'+(DATA.meta.ultimo||'').replace(/\//g,'-')+'.csv',txt,'text/csv');
@@ -1662,8 +1752,18 @@ function repExportaCsv(){
 function repWire(){
   document.querySelectorAll('#main tr.clkp').forEach(tr=>tr.onclick=ev=>{
     if(ev.target.closest('select,a,button')) return;
-    const p=tr.dataset.p; RPS.sel=(RPS.sel===p?null:p); RPS.vista='pen'; RPS.q=''; RPS.tope=120; render();});
-  document.querySelectorAll('#main .rtab').forEach(t=>t.onclick=()=>{RPS.vista=t.dataset.v; RPS.tope=120; render();});
+    const p=tr.dataset.p; RPS.sel=(RPS.sel===p?null:p); RPS.vista='cuadre'; RPS.cap=null; RPS.q=''; RPS.tope=120; render();});
+  document.querySelectorAll('#main .rtab').forEach(t=>t.onclick=()=>{RPS.vista=t.dataset.v; RPS.tope=120; RPS.cap=null; render();});
+  document.querySelectorAll('#main tr.clkc').forEach(tr=>tr.onclick=ev=>{
+    if(ev.target.closest('select,a,button')) return;
+    const k=tr.dataset.c; RPS.cap=(RPS.cap===k?null:k); RPS.tope=120; render();});
+  document.querySelectorAll('#main button.tick').forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation(); const k=okKey(RPS.sel,b.dataset.ok);
+    if(RPS.ok[k]) delete RPS.ok[k]; else RPS.ok[k]=true; render();});
+  document.querySelectorAll('#main select.csel').forEach(s2=>s2.onchange=()=>{
+    const i=+s2.dataset.i, base=s2.dataset.base;
+    if(s2.value===base) delete RPS.ovc[i]; else RPS.ovc[i]=s2.value;
+    render();});
   document.querySelectorAll('#main select.osel').forEach(s=>s.onchange=()=>{
     const i=+s.dataset.i, base=s.dataset.base;
     if(s.value===base) delete RPS.ov[i]; else RPS.ov[i]=s.value;
@@ -1733,6 +1833,29 @@ function vCal(){
   const tFr=tbl([{t:'Proveedor',l:1},{t:'Referencia',l:1},{t:'Fecha'},{t:'Importe'},{t:'Pagado'},{t:'Pendiente'},{t:'Promoción',l:1}],
     frSin.slice(0,60).map(x=>({c:[{v:esc(x[1])+'<div class="muted small">'+x[0]+'</div>'},{v:'<span class="pill">'+esc(x[2])+'</span>'},{v:x[3]},
       {v:eur(x[4])},{v:eur(x[5])},{v:eur(x[6]),cls:'wrn'},{v:'<span class="chip">'+esc(PMAP[x[8]]?.nom||x[8])+'</span>'}]})));
+  // mi reparto frente a la analitica de contabilidad
+  const AC=DATA.ana?.cmp||[];
+  const expl=x=>{
+    if(Math.abs(x.dif)<0.5) return '<span class="chip ok">Coincide</span>';
+    const p=[];
+    if(x.spv) p.push('la analítica no recoge la sociedad vehículo');
+    if(x.apert) p.push('el suelo entra por el asiento de apertura');
+    if(x.cod==='SIN_ASIGNAR') p.push('la analítica reparte estructura que aquí no se imputa a obra');
+    if(x.cod==='OFICINAS') p.push('la analítica trata oficinas como proyecto');
+    return p.length?'<span class="chip info">'+esc(p.join(' · '))+'</span>':'<span class="chip warn">Pendiente de explicar</span>';};
+  const acr=AC.filter(x=>x.base>0.5||Math.abs(x.ana)>0.5).map(x=>({
+    cls:Math.abs(x.dif)>100000?'':'',c:[
+      {v:'<b>'+esc(PMAP[x.cod]?.nom||x.cod)+'</b>'},
+      {v:eur(x.mio_total)},
+      {v:x.spv||x.apert?eur(-(x.spv+x.apert)):'<span class="muted">—</span>',cls:'muted'},
+      {v:eur(x.base)},{v:eur(x.ana)},
+      {v:eur(x.dif),cls:Math.abs(x.dif)<0.5?'pos':(Math.abs(x.dif)>100000?'neg':'wrn')},
+      {v:x.ana?pct1(100*x.dif/x.ana):'—'},
+      {v:expl(x),cls:'l'}]}));
+  {const t=AC.reduce((a,x)=>({m:a.m+x.mio_total,s:a.s+x.spv+x.apert,b:a.b+x.base,a:a.a+x.ana,d:a.d+x.dif}),{m:0,s:0,b:0,a:0,d:0});
+   acr.push({cls:'tot',c:[{v:'<b>Total</b>'},{v:eur(t.m)},{v:eur(-t.s)},{v:eur(t.b)},{v:eur(t.a)},{v:eur(t.d)},
+     {v:t.a?pct1(100*t.d/t.a):'—'},{v:''}]});}
+  const tAna=tbl([{t:'Promoción',l:1},{t:'Mi reparto'},{t:'No comparable'},{t:'Base comparable'},{t:'Analítica'},{t:'Diferencia'},{t:'%'},{t:'Motivo',l:1}],acr);
   // contraste real contable vs ejecutado del estudio
   const RC=repCalc();
   const cmpP=P_REAL.filter(p=>p.pres);
@@ -1762,6 +1885,11 @@ function vCal(){
      <div class="legend"><b>Pincha en el nombre de cualquier promoción</b> y se despliega debajo la lista de facturas que explican su diferencia, con un desplegable en cada línea para cambiarle la obra.
      <i>Pdte. de activar</i> es el gasto ya contabilizado en meses posteriores al último asiento de variación de existencias: está en los libros pero todavía no forma parte del coste de la obra. <i>Por explicar</i> es la diferencia que queda una vez incorporado.
      El resto responde a que la columna <i>Ejecutado</i> del estudio no esté actualizada al último cierre, o a que el estudio recoja conceptos que la contabilidad no activa en existencias.</div></div></div>
+   <div class="card"><h3>Mi reparto por promoción frente a la analítica de contabilidad <span class="note">analítica hasta ${esc(DATA.ana?.corte||'—')}</span></h3><div class="cbody">
+     ${tAna}
+     <div class="legend">Columna <i>Mi reparto</i>: coste que este cuadro imputa a cada promoción, leyendo los diarios y aplicando los criterios de la tabla de arriba. Columna <i>Analítica</i>: lo que el fichero de analítica de contabilidad asigna a ese mismo proyecto.
+     Para comparar lo mismo se descuenta de mi reparto lo que la analítica no recoge —las sociedades vehículo, que no entran en el fichero, y el asiento de apertura— y se compara contra la analítica a su fecha de corte.
+     <b>En seis de las ocho promociones con estudio, la cifra de la analítica y la columna <i>Ejecutado</i> del estudio económico son idénticas al céntimo</b>, así que esta tabla y el cuadre por capítulos miran la misma diferencia desde dos ángulos.</div></div></div>
    <div class="card"><h3>Conciliación entre gasto contabilizado y coste imputado a promociones</h3><div class="cbody scroll">${tConc}
      <div class="legend">El coste imputado incluye compras de suelo e inmovilizado de promoción, que no son gasto del ejercicio: por eso puede superar al gasto contabilizado.</div></div></div>
    <div class="grid1">

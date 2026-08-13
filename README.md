@@ -82,7 +82,7 @@ Los enlaces son rutas relativas, así que funcionan al abrir el dashboard desde 
 
 ## Verificación
 
-`verificar.py` vuelve a leer los diarios contables desde Excel, aplica el mismo criterio de exclusión de asientos técnicos y contrasta 220 magnitudes contra `DATA.json`: apuntes, partida doble, coste incurrido, obra en curso, ingresos, coste de las unidades entregadas, caja, deuda, saldos de clientes y proveedores cuenta a cuenta, tesorería, presupuesto, cuadro comercial, capítulos de obra, cronograma, analítica y reparto de coste. Incluye además comprobaciones de coherencia interna: la misma magnitud no puede salir distinta en dos pestañas.
+`verificar.py` vuelve a leer los diarios contables desde Excel, aplica el mismo criterio de exclusión de asientos técnicos y contrasta 252 magnitudes contra `DATA.json`: apuntes, partida doble, coste incurrido, obra en curso, ingresos, coste de las unidades entregadas, caja, deuda, saldos de clientes y proveedores cuenta a cuenta, tesorería, presupuesto, cuadro comercial, capítulos de obra, cronograma, analítica, reparto de coste y cuadre por capítulo. Incluye además comprobaciones de coherencia interna: la misma magnitud no puede salir distinta en dos pestañas.
 
 ```
 python verificar.py
@@ -100,7 +100,11 @@ La columna *Ejecutado* del estudio económico es una cifra que se mantiene a man
 
 El ETL aísla en `DATA.rep` cuatro conjuntos de apuntes por promoción: las **activaciones** en existencias, que son las que literalmente forman el Real contable; el **gasto 6xx** que la contabilidad imputa a la promoción, factura a factura; el **coste incurrido posterior al último asiento de variación de existencias**, que está en los libros pero todavía no forma parte del coste de ninguna obra; y la **bandeja** de gasto sin promoción, como candidatos. Sobre esos conjuntos, el cuadro construye el puente de la diferencia y permite reasignar la obra de cualquier apunte.
 
-Reasignar no toca `DATA.json`: la decisión vive en memoria, las tablas se recalculan al momento y el resultado se descarga en un fichero de reasignaciones. Ese fichero es lo que se incorpora al ETL como regla permanente, de modo que el cambio queda documentado y el cierre siguiente ya nace bien.
+Sobre esos conjuntos el cuadro construye un **cuadre por capítulo** que cierra al céntimo: la columna contable suma exactamente el Real contable de la promoción y la columna del estudio su ejecutado, de modo que la diferencia entre ambas queda repartida entre líneas concretas sin dejar residuo. Cada apunte se clasifica en el capítulo equivalente del estudio por su cuenta y, cuando cae en una cuenta 606 de obra —que en esta contabilidad recoge también suelo, honorarios y comercialización—, por el proveedor del asiento. Esa clasificación es un punto de partida revisable: cada línea se abre en sus facturas y cada factura se puede mover de capítulo o de obra. Marcando líneas como explicadas, el indicador *Por explicar* de la promoción baja hasta cero.
+
+La pestaña de calidad incluye además el contraste entre el reparto de este cuadro y la analítica que mantiene contabilidad, promoción a promoción, descontando lo que no es comparable —las sociedades vehículo, que no entran en ese fichero, y el asiento de apertura—. En seis de las ocho promociones con estudio la cifra de la analítica y la columna *Ejecutado* del estudio económico coinciden al céntimo, de modo que ambos contrastes miran la misma diferencia desde dos ángulos.
+
+Reasignar no toca `DATA.json`: la decisión vive en memoria, las tablas se recalculan al momento y el resultado se descarga en un fichero que recoge tanto las reasignaciones apunte a apunte como el estado del cuadre. Ese fichero es lo que se incorpora al ETL como regla permanente, de modo que el cambio queda documentado y el cierre siguiente ya nace bien.
 
 ## Ficheros
 
