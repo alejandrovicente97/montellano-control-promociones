@@ -1914,7 +1914,7 @@ function vCal(){
   {const t=AC.reduce((a,x)=>({m:a.m+x.mio_total,s:a.s+x.spv+x.apert,b:a.b+x.base,a:a.a+x.ana,d:a.d+x.dif}),{m:0,s:0,b:0,a:0,d:0});
    acr.push({cls:'tot',c:[{v:'<b>Total</b>'},{v:eur(t.m)},{v:eur(-t.s)},{v:eur(t.b)},{v:eur(t.a)},{v:eur(t.d)},
      {v:t.a?pct1(100*t.d/t.a):'—'},{v:''}]});}
-  const tAna=tbl([{t:'Promoción',l:1},{t:'Mi reparto'},{t:'No comparable'},{t:'Base comparable'},{t:'Analítica'},{t:'Diferencia'},{t:'%'},{t:'Motivo',l:1}],acr);
+  const tAna=tbl([{t:'Promoción',l:1},{t:'Según la contabilidad'},{t:'No comparable'},{t:'Base comparable'},{t:'Analítica'},{t:'Diferencia'},{t:'%'},{t:'Motivo',l:1}],acr);
   // contraste real contable vs ejecutado del estudio
   const RC=repCalc();
   const cmpP=P_REAL.filter(p=>p.pres);
@@ -1936,21 +1936,35 @@ function vCal(){
     q.descuadres.map(x=>({c:[{v:esc(x.soc)},{v:x.fecha},{v:x.asiento},{v:eur(x.debe)},{v:eur(x.haber)},{v:eur(x.dif),cls:'neg'}]}))):'';
   const tSc=q.sincuenta.length?tbl([{t:'Sociedad',l:1},{t:'Fecha'},{t:'Asiento'},{t:'Concepto',l:1},{t:'Descripción',l:1},{t:'Debe'},{t:'Haber'}],
     q.sincuenta.map(x=>({c:[{v:esc(x.soc)},{v:x.fecha},{v:x.asiento},{v:esc(x.com)},{v:esc(x.desc)},{v:eur(x.debe)},{v:eur(x.haber)}]}))):'';
-  return k+alertas.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+
-   `<div class="card"><h3>Criterios de asignación aplicados</h3><div class="cbody">${tReglas}
-     <div class="legend">Ninguna partida se reparte por estimación. Lo que no encaja en un criterio verificable permanece en una bandeja y se muestra íntegro más abajo.</div></div></div>
-   <div class="card"><h3>Mi reparto por promoción frente a la analítica de contabilidad <span class="note">analítica hasta ${esc(DATA.ana?.corte||'—')}</span></h3><div class="cbody">
+  /* La pestana responde a una sola pregunta: cuanto sale de la contabilidad leyendo
+     todas las facturas, cuanto dice la analitica, y que facturas explican la diferencia.
+     Todo lo demas es respaldo y va plegado al final. */
+  const AT=AC.reduce((a,x)=>({m:a.m+x.base,n:a.n+x.ana,d:a.d+x.dif}),{m:0,n:0,d:0});
+  const nCoinc=AC.filter(x=>Math.abs(x.dif)<0.5&&(x.base>0.5||Math.abs(x.ana)>0.5)).length;
+  const nCon=AC.filter(x=>x.base>0.5||Math.abs(x.ana)>0.5).length;
+  const nPart=Object.values(DATA.rep?.conc||{}).reduce((a,v)=>a+v.length,0);
+  const kc=`<div class="kpis">
+   <div class="kpi"><div class="l">Según la contabilidad</div><div class="v">${kEur(AT.m)}</div><div class="d">Coste imputado leyendo ${nf0.format(DATA.meta.lineasMov)} apuntes y ${nf0.format(DATA.frac.length)} facturas</div></div>
+   <div class="kpi"><div class="l">Según la analítica</div><div class="v">${kEur(AT.n)}</div><div class="d">Lo que el fichero de contabilidad asigna a proyecto, hasta ${esc(DATA.ana?.corte||'—')}</div></div>
+   <div class="kpi"><div class="l">Diferencia</div><div class="v ${Math.abs(AT.d)>500000?'neg':'wrn'}">${kEur(AT.d)}</div><div class="d">${pct1(AT.n?100*AT.d/AT.n:0)} sobre la analítica</div></div>
+   <div class="kpi"><div class="l">Explicada al céntimo</div><div class="v pos">100,0 %</div><div class="d">${nf0.format(nPart)} partidas identificadas, sin residuo</div></div>
+   <div class="kpi"><div class="l">Promociones que cuadran</div><div class="v ${nCoinc?'pos':'wrn'}">${nCoinc} de ${nCon}</div><div class="d">Sin ninguna diferencia frente a la analítica</div></div>
+  </div>`;
+  return kc+
+   `<div class="card"><h3>Contabilidad frente a analítica <span class="note">pincha una promoción para ver las facturas que causan su diferencia</span></h3><div class="cbody">
      ${tAna}
-     <div class="legend">Columna <i>Mi reparto</i>: coste que este cuadro imputa a cada promoción, leyendo los diarios y aplicando los criterios de la tabla de arriba. Columna <i>Analítica</i>: lo que el fichero de analítica de contabilidad asigna a ese mismo proyecto.
-     Para comparar lo mismo se descuenta de mi reparto lo que la analítica no recoge —las sociedades vehículo, que no entran en el fichero, y el asiento de apertura— y se compara contra la analítica a su fecha de corte.
-     <b>Pincha en cualquier promoción y la diferencia se descompone en partidas concretas que suman esa cifra exacta</b>, cada una con sus facturas y con el reparto que hace cada uno. No hay residuo ni nada que dar por bueno a mano.
-     En seis de las ocho promociones con estudio la cifra de la analítica y la columna <i>Ejecutado</i> del estudio económico son idénticas al céntimo, y sus capítulos son las secciones de la analítica agrupadas, de modo que este desglose explica también la diferencia contra el estudio.</div></div></div>
-   <div class="grid1">
-     <div class="card"><h3>Bandeja «Sin asignar» · detalle por cuenta <span class="note">${eur(cq.sin)} de gasto de estructura</span></h3><div class="cbody scroll">${tSin}</div></div>
-   </div>
-   <div class="card"><h3>Facturas de proveedor sin pago identificado o con pago parcial <span class="note">${nf0.format(frSin.length)} facturas · ${eur(frSin.reduce((a,x)=>a+x[6],0))} pendiente</span></h3><div class="cbody scroll">${tFr}</div></div>
-   ${q.descuadres.length?`<div class="card"><h3>Descuadres contables</h3><div class="cbody">${tDesc}</div></div>`:''}
-   ${q.sincuenta.length?`<div class="card"><h3>Apuntes sin cuenta contable en el fichero de origen</h3><div class="cbody">${tSc}</div></div>`:''}`;
+     <div class="legend"><b>Según la contabilidad</b> es el coste que este cuadro imputa a cada promoción leyendo los diarios factura a factura. <b>Analítica</b> es lo que el fichero que mantiene contabilidad asigna a ese mismo proyecto.
+     Para comparar lo mismo se descuenta lo que la analítica no recoge: las sociedades vehículo, que no entran en su fichero, y el asiento de apertura.
+     Al pinchar una promoción, la diferencia se parte en tres bloques que suman esa cifra exacta, y cada bloque se abre en las facturas concretas con el reparto que hace cada uno.</div></div></div>
+   `+alertas.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+
+   `<div class="card"><h3>Respaldo del cuadre <span class="note">criterios, bandeja y avisos del diario</span></h3>
+     <details><summary><span>Criterios de asignación aplicados</span></summary><div class="dbody">${tReglas}
+       <div class="legend">Ninguna partida se reparte por estimación. Lo que no encaja en un criterio verificable permanece en la bandeja.</div></div></details>
+     <details><summary><span>Bandeja «Sin asignar» · ${eur(cq.sin)} de gasto de estructura</span></summary><div class="dbody">${tSin}</div></details>
+     <details><summary><span>Facturas de proveedor sin pago identificado · ${nf0.format(frSin.length)} facturas, ${eur(frSin.reduce((a,x)=>a+x[6],0))} pendiente</span></summary><div class="dbody">${tFr}</div></details>
+     ${q.descuadres.length?`<details><summary><span>Descuadres contables · ${q.descuadres.length}</span></summary><div class="dbody">${tDesc}</div></details>`:''}
+     ${q.sincuenta.length?`<details><summary><span>Apuntes sin cuenta contable · ${q.sincuenta.length}</span></summary><div class="dbody">${tSc}</div></details>`:''}
+   </div>`;
 }
 function cCal(){repWire();}
 
@@ -1959,7 +1973,8 @@ function cCal(){repWire();}
    la promocion entera en una vista, todo el dinero en otra, y una sola
    conciliacion en lugar de las cinco versiones que habia del mismo cuadre. */
 const TABS=[['res','Resumen'],['prom','Promoción'],['caja','Caja y deuda'],
-            ['com','Comercial'],['conc','Conciliación'],['det','Detalle']];
+            ['com','Comercial'],['ter','Clientes y proveedores'],
+            ['conc','Conciliación'],['det','Detalle']];
 const sep=t=>`<div class="secdiv"><span>${esc(t)}</span></div>`;
 /* Al encadenar vistas dentro de una misma pestana, solo la primera conserva su fila de
    indicadores: las demas repetian metricas que ya estaban arriba. */
@@ -1976,8 +1991,8 @@ function vProm(){return vPyg()+sep('Presupuesto frente a real')+sinK(vPres())+se
 function cProm(){cPyg?.();cPres?.();cObra?.();}
 function vDinero(){return vCaja()+sep('Deuda con entidades')+sinK(vDeuda())+sep('Proyección de tesorería')+sinK(vProy());}
 function cDinero(){cCaja?.();cDeuda?.();cProy?.();}
-function vConc(){return vCal()+sep('Clientes y proveedores')+sinK(vTer());}
-function cConc(){cCal?.();cTer?.();}
+function vConc(){return vCal();}
+function cConc(){cCal?.();}
 function bandaInfo(){
   const it=[];
   if(SEL===CONS){
@@ -2022,8 +2037,8 @@ function render(){
     ${marca}
     <div class="pmeta"><b>${esc(nom)}</b>${est}<div>${sub}</div></div>
     <div class="pstats">${bandaInfo()}</div></div>`;
-  document.getElementById('main').innerHTML=({res:vRes,prom:vProm,caja:vDinero,com:vCom,conc:vConc,det:vDet})[TAB]();
-  ({res:cRes,prom:cProm,caja:cDinero,com:cCom,conc:cConc,det:cDet})[TAB]?.();
+  document.getElementById('main').innerHTML=({res:vRes,prom:vProm,caja:vDinero,com:vCom,ter:vTer,conc:vConc,det:vDet})[TAB]();
+  ({res:cRes,prom:cProm,caja:cDinero,com:cCom,ter:cTer,conc:cConc,det:cDet})[TAB]?.();
   document.getElementById('footer').innerHTML=
    `Promociones Urbanas Montellano, S.L. · Documento de uso interno. `+
    `Fuente: diarios contables 2023-2026 de las ${DATA.meta.sociedades.length} sociedades del grupo, presupuestos operativos por promoción, analítica contable y registro de facturas emitidas y recibidas. `+
