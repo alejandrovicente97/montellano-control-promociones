@@ -2050,6 +2050,13 @@ function render(){
     <div class="pstats">${bandaInfo()}</div></div>`;
   document.getElementById('main').innerHTML=({res:vRes,prom:vProm,caja:vDinero,com:vCom,ter:vTer,conc:vConc,det:vDet})[TAB]();
   ({res:cRes,prom:cProm,caja:cDinero,com:cCom,ter:cTer,conc:cConc,det:cDet})[TAB]?.();
+  /* Una tarjeta cuya tabla no cabe en su mitad de rejilla pasa a ocupar la fila
+     entera: mejor otra linea hacia abajo que una tabla estrujada con barra.
+     Los graficos se reajustan solos (Chart.js observa el tamano del contenedor). */
+  document.querySelectorAll('#main .grid2>.card,#main .grid3>.card').forEach(cd=>{
+    const t=cd.querySelector('.cbody table');
+    if(t&&t.scrollWidth>cd.clientWidth*1.06) cd.style.gridColumn='1 / -1';
+  });
   document.getElementById('footer').innerHTML=
    `Promociones Urbanas Montellano, S.L. · Documento de uso interno. `+
    `Fuente: diarios contables 2023-2026 de las ${DATA.meta.sociedades.length} sociedades del grupo, presupuestos operativos por promoción, analítica contable y registro de facturas emitidas y recibidas. `+
