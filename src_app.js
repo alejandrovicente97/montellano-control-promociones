@@ -1714,7 +1714,7 @@ function repWire(){
   document.querySelectorAll('#main .rtab').forEach(t=>t.onclick=()=>{RPS.vista=t.dataset.v; RPS.tope=120; RPS.cap=null; render();});
   document.querySelectorAll('#main tr.clka').forEach(tr=>tr.onclick=ev=>{
     if(ev.target.closest('select,a,button')) return;
-    const a=tr.dataset.a; RPS.csel=(RPS.csel===a?null:a); RPS.cap=null; RPS.tope=120; render();});
+    const a=tr.dataset.a; RPS.csel=(RPS.csel===a?null:a); RPS.cap=null; RPS.tope=15; render();});
   document.querySelectorAll('#main tr.clkc').forEach(tr=>tr.onclick=ev=>{
     if(ev.target.closest('select,a,button')) return;
     const k=tr.dataset.c; RPS.cap=(RPS.cap===k?null:k); RPS.tope=120; render();});
@@ -1734,6 +1734,7 @@ function repWire(){
     window.__rpT=setTimeout(()=>{const v=q.value; RPS.q=v; RPS.tope=120; render();
       const n=document.getElementById('rpQ'); if(n){n.focus(); n.setSelectionRange(v.length,v.length);} },260);};
   const m=document.getElementById('rpMas'); if(m) m.onclick=()=>{RPS.tope+=500; render();};
+  const m2=document.getElementById('rpMas2'); if(m2) m2.onclick=()=>{RPS.tope+=100; render();};
   const x=document.getElementById('rpCerrar'); if(x) x.onclick=()=>{RPS.sel=null; render();};
   const e=document.getElementById('rpExp'); if(e) e.onclick=repExporta;
   const c=document.getElementById('rpCsv'); if(c) c.onclick=repExportaCsv;
@@ -1789,45 +1790,58 @@ function concDetalle(cod,t){
    <div class="legend">Si una factura está imputada a la obra equivocada, cámbiala en el desplegable de la derecha. La decisión queda recogida y se descarga con el botón <i>Descargar reasignaciones</i> de la pestaña de promoción, para incorporarla al ETL como regla permanente. <b>Ojo:</b> esta tabla no se recalcula al momento, porque la columna de la analítica es un fichero cerrado; el efecto se ve al regenerar el cuadro.</div>`;
 }
 function concPanel(cod){
-  const f=concFilas(cod), tot=f.reduce((a,x)=>a+x[1].imp,0);
-  const cm=(DATA.ana?.cmp||[]).find(x=>x.cod===cod)||{base:0,ana:0,spv:0,apert:0,julio:0};
-  const nc=(cm.spv||0)+(cm.apert||0)+(cm.julio||0);
-  /* Nombres en castellano llano: el puente arranca en mi cifra y aterriza en la suya. */
-  const NOM={reparto:'Facturas que ella coloca en otra obra',
-             importe:'Facturas donde el importe no coincide',
-             solo_uno:'Facturas que solo tiene uno de los dos',
-             activacion:'Suelo y regularizaciones que entran sin factura'};
-  const filas=[{cls:'tot',c:[
-    {v:'<b>Lo que sale de la contabilidad</b><div class="muted small">Leyendo los diarios factura a factura</div>',cls:'l'},
-    {v:eur(cm.base)}]}];
-  if(Math.abs(nc)>0.5) filas.push({c:[
-    {v:'Movimientos que su fichero no recoge<div class="muted small">'+
-      [cm.spv?'sociedad vehículo '+eur(cm.spv):'',cm.apert?'asiento de apertura '+eur(cm.apert):'',
-       cm.julio?'julio, posterior a su corte '+eur(cm.julio):''].filter(Boolean).join(' · ')+'</div>',cls:'l'},
-    {v:eur(nc),cls:'muted'}]});
-  f.forEach(([t,v])=>{
-    const ab=RPS.cap==='C:'+t;
-    filas.push({cls:'clk clkc'+(ab?' sel':''),attr:`data-c="C:${t}"`,c:[
-      {v:`${esc(NOM[t]||t)} <span class="muted small">${nf0.format(v.n)} facturas</span> <span class="lupa">${ab?'▾':'▸ ver cuáles'}</span>`,cls:'l'},
-      {v:eur(-v.imp),cls:Math.abs(v.imp)>100000?'neg':(Math.abs(v.imp)>20000?'wrn':'')}]});
-    if(ab) filas.push({raw:`<td class="expand2 l" colspan="2"><div class="expwrap2">
-      ${(CTIP[t]||['',''])[1]?`<div class="legend" style="margin:0 0 9px">${(CTIP[t]||['',''])[1]}</div>`:''}
-      ${concDetalle(cod,t)}</div></td>`});
-  });
-  filas.push({cls:'tot',c:[{v:'<b>Lo que dice la analítica</b>',cls:'l'},{v:eur(cm.ana)}]});
-  const ctrl=(cm.base||0)+nc-tot;
+  /* Una sola lista, plana y ordenada por peso: cada fila es una factura o un
+     movimiento concreto, con su motivo escrito en castellano y su efecto en
+     euros sobre la diferencia. Nada queda escondido detras de un segundo clic:
+     lo que no cabe se agrega en la fila "resto", de modo que la columna de
+     efecto suma exactamente la diferencia publicada. */
+  const it=(CONC[cod]||[]).slice().sort((a,b)=>Math.abs(b.imp)-Math.abs(a.imp));
+  const cm=(DATA.ana?.cmp||[]).find(x=>x.cod===cod)||{base:0,ana:0,dif:0,spv:0,apert:0,julio:0};
+  const dif=cm.dif||0, N=Math.min(RPS.tope,it.length);
+  const motivo=x=>{
+    if(x.t==='importe') return `<b>El importe no coincide.</b> Yo tengo ${eur(x.mio)} y la analítica ${eur(x.ana)}: probable abono sumado en positivo o importe duplicado. Incidencia para contabilidad.`;
+    if(x.t==='otra_obra'){const o=Object.entries(x.otros||{}).map(([k,v])=>`${esc(PMAP[k]?.nom||k)} (${eur(v)})`).join(' y ');
+      return `<b>La analítica la lleva a otra obra:</b> ${o||'otro proyecto'}. Yo la dejo aquí porque la cuenta y el asiento apuntan a esta promoción.`;}
+    if(x.t==='reparto'){const o=Object.entries(x.otros||{}).map(([k,v])=>`${esc(PMAP[k]?.nom||k)} ${eur(v)}`).join(' · ');
+      return `<b>Repartida distinto.</b> La analítica la trocea: ${o||'entre proyectos y fases'}.`;}
+    if(x.t==='solo_ana') return `<b>Solo está en la analítica.</b> No encuentro un apunte del diario con esa fecha, cuenta y concepto.`;
+    if(x.t==='no_ana') return `<b>Solo está en el diario.</b> Su fichero no la recoge: sociedad vehículo o posterior a su corte de junio.`;
+    if(x.t==='residuo') return `<b>Activación sin factura.</b> El asiento mensual de variación de existencias activa más de lo que suma el gasto del periodo.`;
+    if(x.t==='directa') return `<b>Compra directa a existencias.</b> Suelo o inmovilizado que entra sin pasar por una cuenta de gasto.`;
+    return '';};
+  const filas=it.slice(0,N).map(x=>{
+    const i=x.i, r=i!=null?APU[i]:null;
+    const txt=r?esc(r[3])+(r[4]&&r[4]!==r[3]?'<div class="muted small">'+esc(r[4])+'</div>':'')
+             :'<span class="muted">(sin apunte en el diario)</span>';
+    return {c:[
+      {v:r?r[1]:'—'},
+      {v:(r&&apPdf(i))?pdfLink(apPdf(i),txt):txt,cls:'l'},
+      {v:'<span class="small">'+motivo(x)+'</span>',cls:'l'},
+      {v:eur(-x.imp),cls:Math.abs(x.imp)>100000?'neg':(Math.abs(x.imp)>20000?'wrn':'')},
+      {v:(i!=null&&APU[i])?oSel(i,APU[i][8]):'<span class="muted">—</span>',cls:'l'}]};});
+  const resto=it.slice(N), rimp=resto.reduce((a,x)=>a+x.imp,0);
+  if(resto.length) filas.push({c:[{v:'—'},
+    {v:`<b>Resto</b>: ${nf0.format(resto.length)} partidas menores`,cls:'l'},
+    {v:'<span class="small muted">Cada una por debajo de las de arriba; amplía con el botón si quieres verlas.</span>',cls:'l'},
+    {v:eur(-rimp)},{v:''}]});
+  filas.push({cls:'tot',c:[{v:''},{v:'<b>Diferencia total</b>',cls:'l'},
+    {v:'<span class="small">Contabilidad '+eur(cm.base)+' menos analítica '+eur(cm.ana)+'</span>',cls:'l'},
+    {v:eur(dif),cls:Math.abs(dif)>100000?'neg':'wrn'},{v:''}]});
+  const cubierto=it.slice(0,N).reduce((a,x)=>a+Math.abs(x.imp),0);
+  const total=it.reduce((a,x)=>a+Math.abs(x.imp),0);
   return `<div class="expwrap">
-    <div style="font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:4px">De mi cifra a la suya, paso a paso</div>
-    <div class="legend" style="margin:0 0 12px">Se parte del coste que la contabilidad imputa a ${esc(PMAP[cod]?.nom||cod)} y se van sumando y restando los motivos hasta llegar exactamente a la cifra de la analítica.</div>
+    <div style="font-weight:600;color:var(--navy);font-size:13.5px;margin-bottom:4px">Qué compone la diferencia de ${esc(PMAP[cod]?.nom||cod)}: ${eur(dif)}</div>
+    <div class="legend" style="margin:0 0 10px">Contabilidad y OCR de facturas: ${eur(cm.base)} · Analítica: ${eur(cm.ana)}. Debajo, cada factura o movimiento que separa las dos cifras, de mayor a menor, con su motivo. La columna de efecto suma exactamente la diferencia.
+    ${total?`Las ${nf0.format(N)} partidas visibles cubren el ${pct1(100*cubierto/total)} del importe en juego.`:''}</div>
     <div class="toolbar">
       <button class="btn pri" id="rpExp"${(nOv()||nOvc())?'':' disabled'}>Descargar cambios de obra${(nOv()+nOvc())?' ('+(nOv()+nOvc())+')':''}</button>
       <button class="btn" id="rpCsv"${(nOv()||nOvc())?'':' disabled'}>Descargar en CSV</button>
       <button class="btn" id="rpDes"${(nOv()||nOvc())?'':' disabled'}>Deshacer todo</button>
-      <span class="muted small">${nOv()+nOvc()?(nOv()+nOvc())+' apunte(s) reasignado(s). Nada se ha modificado en la contabilidad.':'Cambia la obra de una factura en el detalle y aquí podrás descargar la propuesta.'}</span>
+      ${resto.length?`<button class="btn" id="rpMas2">Ver ${nf0.format(Math.min(100,resto.length))} más</button>`:''}
+      <span class="muted small">${nOv()+nOvc()?(nOv()+nOvc())+' apunte(s) con cambio de obra propuesto.':'Si una factura está en la obra equivocada, cámbiala en el desplegable: la propuesta se descarga con el botón.'}</span>
     </div>
-    ${Math.abs(ctrl-(cm.ana||0))>0.05?`<div class="alert bad"><b>Aviso.</b> El puente no cierra por ${eur(ctrl-(cm.ana||0))}.</div>`:''}
-    ${tbl([{t:'Concepto',l:1},{t:'Importe'}],filas)}
-    <div class="legend">Las líneas intermedias suman <b>exactamente</b> la diferencia entre las dos cifras: no queda residuo. Pincha cualquiera para ver las facturas concretas, cómo las reparte cada uno y cambiar la obra si alguna está mal imputada.</div>
+    <div class="scroll">${tbl([{t:'Fecha'},{t:'Factura / movimiento',l:1},{t:'Qué ocurre',l:1},{t:'Efecto'},{t:'Cambiar la obra',l:1}],filas)}</div>
+    <div class="legend">Positivo acerca mi cifra a la suya; negativo la aleja. Se descuentan antes los movimientos que su fichero no recoge (sociedad vehículo, apertura y julio), que no son discrepancia sino perímetro.</div>
   </div>`;
 }
 /* ============================== CALIDAD DE DATOS ============================== */
@@ -1951,7 +1965,7 @@ function vCal(){
      ${tAna}
      <div class="legend"><b>Según la contabilidad</b> es el coste que este cuadro imputa a cada promoción leyendo los diarios factura a factura. <b>Analítica</b> es lo que el fichero que mantiene contabilidad asigna a ese mismo proyecto.
      Para comparar lo mismo se descuenta lo que la analítica no recoge: las sociedades vehículo, que no entran en su fichero, y el asiento de apertura.
-     Al pinchar una promoción, la diferencia se parte en tres bloques que suman esa cifra exacta, y cada bloque se abre en las facturas concretas con el reparto que hace cada uno.</div></div></div>
+     Al pinchar una promoción se despliegan directamente las facturas y movimientos que componen su diferencia, de mayor a menor, cada uno con su motivo y su efecto en euros; la columna de efecto suma la diferencia exacta.</div></div></div>
    `+alertas.map(x=>`<div class="alert ${x.t}"><b>${x.h}.</b> ${x.x}</div>`).join('')+
    `<div class="card"><h3>Respaldo del cuadre <span class="note">criterios, bandeja y avisos del diario</span></h3>
      <details><summary><span>Criterios de asignación aplicados</span></summary><div class="dbody">${tReglas}
