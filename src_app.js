@@ -1734,7 +1734,8 @@ function repWire(){
     window.__rpT=setTimeout(()=>{const v=q.value; RPS.q=v; RPS.tope=120; render();
       const n=document.getElementById('rpQ'); if(n){n.focus(); n.setSelectionRange(v.length,v.length);} },260);};
   const m=document.getElementById('rpMas'); if(m) m.onclick=()=>{RPS.tope+=500; render();};
-  const m2=document.getElementById('rpMas2'); if(m2) m2.onclick=()=>{RPS.tope+=100; render();};
+  document.querySelectorAll('#main button.masconc').forEach(b=>b.onclick=ev=>{
+    ev.stopPropagation(); RPS.tope+=100; render();});
   const x=document.getElementById('rpCerrar'); if(x) x.onclick=()=>{RPS.sel=null; render();};
   const e=document.getElementById('rpExp'); if(e) e.onclick=repExporta;
   const c=document.getElementById('rpCsv'); if(c) c.onclick=repExportaCsv;
@@ -1822,7 +1823,7 @@ function concPanel(cod){
   const resto=it.slice(N), rimp=resto.reduce((a,x)=>a+x.imp,0);
   if(resto.length) filas.push({c:[{v:'—'},
     {v:`<b>Resto</b>: ${nf0.format(resto.length)} partidas menores`,cls:'l'},
-    {v:'<span class="small muted">Cada una por debajo de las de arriba; amplía con el botón si quieres verlas.</span>',cls:'l'},
+    {v:`<button class="btn masconc">Ver las ${nf0.format(Math.min(100,resto.length))} siguientes</button>`,cls:'l'},
     {v:eur(-rimp)},{v:''}]});
   filas.push({cls:'tot',c:[{v:''},{v:'<b>Diferencia total</b>',cls:'l'},
     {v:'<span class="small">Contabilidad '+eur(cm.base)+' menos analítica '+eur(cm.ana)+'</span>',cls:'l'},
@@ -1837,7 +1838,7 @@ function concPanel(cod){
       <button class="btn pri" id="rpExp"${(nOv()||nOvc())?'':' disabled'}>Descargar cambios de obra${(nOv()+nOvc())?' ('+(nOv()+nOvc())+')':''}</button>
       <button class="btn" id="rpCsv"${(nOv()||nOvc())?'':' disabled'}>Descargar en CSV</button>
       <button class="btn" id="rpDes"${(nOv()||nOvc())?'':' disabled'}>Deshacer todo</button>
-      ${resto.length?`<button class="btn" id="rpMas2">Ver ${nf0.format(Math.min(100,resto.length))} más</button>`:''}
+      ${resto.length?`<button class="btn masconc">Ver ${nf0.format(Math.min(100,resto.length))} más</button>`:''}
       <span class="muted small">${nOv()+nOvc()?(nOv()+nOvc())+' apunte(s) con cambio de obra propuesto.':'Si una factura está en la obra equivocada, cámbiala en el desplegable: la propuesta se descarga con el botón.'}</span>
     </div>
     <div class="scroll">${tbl([{t:'Fecha'},{t:'Factura / movimiento',l:1},{t:'Qué ocurre',l:1},{t:'Efecto'},{t:'Cambiar la obra',l:1}],filas)}</div>
