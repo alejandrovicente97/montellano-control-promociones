@@ -219,12 +219,10 @@ function vRes(){
     <div class="card"><h3>Coste incurrido por mes <span class="note">imputación a existencias, suelo e inmovilizado</span></h3><div class="cbody"><div class="chartbox"><canvas id="c1"></canvas></div><div class="legend">Hasta 2024 la variación de existencias se contabilizaba una vez al año, por eso el coste de 2023 y 2024 aparece concentrado en diciembre. Desde 2025 la imputación es mensual.</div></div></div>
     <div class="card"><h3>Evolución de la caja <span class="note">saldo acumulado de las cuentas de la promoción</span></h3><div class="cbody"><div class="chartbox"><canvas id="c2"></canvas></div></div></div>
   </div>
-  <div class="card"><h3>Cuadro de mando por promoción <span class="note">${periodo()}</span></h3><div class="cbody scroll">${tbl(head,rows)}</div></div>
-  <div class="grid2">
-    <div class="card"><h3>Inversión acumulada por promoción <span class="note">vida completa 2023-2026</span></h3><div class="cbody"><div class="chartbox"><canvas id="c3"></canvas></div></div></div>
-    <div class="card"><h3>Obra en curso y deuda <span class="note">evolución mensual</span></h3><div class="cbody"><div class="chartbox"><canvas id="c4"></canvas></div></div></div>
-  </div>
-  ${bandeja}`;
+  <div class="card"><h3>Cuadro de mando por promoción <span class="note">${periodo()}</span></h3><div class="cbody scroll">${tbl(head,rows)}</div></div>`;
+  /* Fuera de Resumen, a propósito: la inversión acumulada ya es una columna del
+     cuadro de mando, la obra en curso y la deuda viven en sus pestañas, y la
+     bandeja de estructura está en el respaldo de Conciliación. Menos y mejor. */
 }
 function cRes(){
   const cs=SEL===CONS?P_REAL.map(p=>p.cod):[SEL], L=lblW();
@@ -235,15 +233,6 @@ function cRes(){
   chart('c2',{type:'line',data:{labels:L,datasets:[
     {label:'Saldo de caja',data:c.saldo,borderColor:acc(SEL===CONS?'NUEVOCAMPUS':SEL),backgroundColor:'rgba(16,44,87,.08)',fill:true,tension:.3,pointRadius:0},
     {label:'Variación del mes',data:c.mens,type:'bar',backgroundColor:'#a8783a'}]},options:gopt});
-  const lt=(SEL===CONS?P_REAL.map(p=>p.cod):[SEL]).map(c=>({n:PMAP[c].nom,v:S(c,'actAc')[NM-1]})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
-  chart('c3',{type:'bar',data:{labels:lt.map(x=>x.n),datasets:[{label:'Coste incurrido acumulado',data:lt.map(x=>x.v),backgroundColor:(SEL===CONS?P_REAL.map(p=>p.cod):[SEL]).map(c=>acc(c)).slice(0,lt.length),borderRadius:3}]},
-    options:{...gopt,indexAxis:'y',
-     plugins:{...gopt.plugins,legend:{display:false},
-      tooltip:{callbacks:{title:it=>it[0].label,label:c=>' Coste incurrido: '+eur(c.parsed.x)}}},
-      scales:{x:{grid:{color:'#eef1f6'},ticks:{font:{size:10},callback:v=>kEur(v)}},y:{grid:{display:false},ticks:{font:{size:10}}}}}});
-  chart('c4',{type:'line',data:{labels:L,datasets:[
-    {label:'Obra en curso',data:serW(codes(SEL),'exSaldo'),borderColor:'#2f7d72',backgroundColor:'rgba(47,125,114,.10)',fill:true,tension:.3,pointRadius:0},
-    {label:'Deuda con entidades',data:serW(codes(SEL),'deudaSaldo'),borderColor:'#b3261e',tension:.3,pointRadius:0}]},options:gopt});
 }
 
 /* ============================== P&L ============================== */
@@ -976,9 +965,6 @@ function vTer(){
     ])}
     <div class="legend">Un pagaré o confirming emitido figura como pagado desde su emisión, no desde el vencimiento: lo pendiente es deuda comercial viva, no calendario de salidas de caja.</div></div></div>
   </div>
-  <div class="grid3">
-   <div class="card"><h3>Reparto por promoción</h3><div class="cbody"><div class="chartbox"><canvas id="t2"></canvas></div></div></div>
-  </div>
   <div class="card"><h3>Detalle por tercero <span class="note">${periodo()}</span></h3><div class="cbody">
     <div class="toolbar">
       <select id="tV"><option value="pro">Proveedores</option><option value="cli">Clientes</option></select>
@@ -1003,15 +989,6 @@ function cTer(){
     e.oninput=e.onchange=()=>{FT.v=tV.value;FT.solo=tS.value;FT.o=tO.value;FT.q=tQ.value;FT.sel='';
       const sc=window.scrollY;render();window.scrollTo(0,sc);};});
   const t=terceros(SEL), esCli=FT.v==='cli';
-  const src=(esCli?t.cli:t.pro).filter(x=>esCli?x.saldo>0.05:x.saldo<-0.05)
-    .map(x=>({n:x.nom,v:esCli?x.saldo:-x.saldo,p:x.promo})).sort((a,b)=>b.v-a.v).slice(0,12);
-  const byP={};(esCli?t.cli:t.pro).forEach(x=>{const v=esCli?x.saldo:-x.saldo;if(v>0.05)byP[x.promo]=(byP[x.promo]||0)+v;});
-  const ks=Object.keys(byP).sort((a,b)=>byP[b]-byP[a]);
-  chart('t2',{type:'doughnut',data:{labels:ks.map(c=>PMAP[c]?.nom||c),
-    datasets:[{data:ks.map(c=>byP[c]),backgroundColor:ks.map(c=>acc(c)),borderWidth:2,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'58%',
-     plugins:{legend:{position:'right',labels:{boxWidth:9,boxHeight:9,font:{size:10},usePointStyle:true,pointStyle:'circle'}},
-      tooltip:{callbacks:{label:c=>' '+c.label+': '+eur(c.parsed)}}}}});
 }
 /* ============================== COMERCIAL ============================== */
 const MOD=()=>DATA.mod||{};
